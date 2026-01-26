@@ -1,0 +1,19 @@
+LLVM_URL := https://github.com/mstorsjo/llvm-mingw/releases/download/20251216/llvm-mingw-20251216-ucrt-ubuntu-22.04-x86_64.tar.xz
+LLVM_DIR := $(CURDIR)/llvm-mingw
+DONE_FILE := $(LLVM_DIR)/.llvm-mingw.done
+
+all: llvm-mingw
+
+.PHONY: llvm-mingw
+llvm-mingw: $(DONE_FILE)
+	@echo "export PATH=\"$(LLVM_DIR)/bin:\$$PATH\""
+
+$(DONE_FILE): Makefile.llvm-mingw
+	@rm -rf $(LLVM_DIR)
+	@echo "Downloading and installing llvm-mingw..." >&2
+	@mkdir -p $(LLVM_DIR)
+	@curl -L $(LLVM_URL) | tar -xJ -C $(LLVM_DIR) --strip-components=1
+	@touch $(DONE_FILE)
+
+clean:
+	@rm -rf $(LLVM_DIR)
