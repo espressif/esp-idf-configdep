@@ -1,0 +1,205 @@
+name: build-test-release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  test-linux:
+    name: test linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy clang-format
+
+      - name: lint
+        run: make CC=clang clang-format clang-tidy
+
+      - name: test
+        run: make CC=clang test
+
+  test-windows:
+    name: test windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          install: >-
+            mingw-w64-clang-x86_64-clang-tools-extra
+            mingw-w64-clang-x86_64-clang
+            make
+            diffutils
+
+      - name: lint
+        shell: msys2 {0}
+        run: make CC=clang clang-format clang-tidy
+
+      - name: test
+        shell: msys2 {0}
+        run: make CC=clang test
+
+  test-macos:
+    name: test macos
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install
+        run: |
+          brew install llvm
+          echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+
+      - name: lint
+        run: make CC=clang clang-format clang-tidy
+
+      - name: test
+        run: make CC=clang test
+
+  dist:
+    runs-on: ${{ matrix.runner }}
+    name: dist
+    needs:
+      - test-linux
+      - test-windows
+      - test-macos
+    strategy:
+      matrix:
+        include:
+          - name: linux-i686
+            cc: i686-linux-gnu-gcc
+            runner: ubuntu-latest
+            pkg_manager: sudo apt-get update && sudo apt-get install -y
+            packages: gcc-i686-linux-gnu
+            dist: targz-pkg
+
+          - name: linux-x86-64
+            cc: x86_64-linux-gnu-gcc
+            runner: ubuntu-latest
+            pkg_manager: sudo apt-get update && sudo apt-get install -y
+            packages: gcc-x86-64-linux-gnu
+            dist: targz-pkg
+
+          - name: linux-aarch64
+            cc: aarch64-linux-gnu-gcc
+            runner: ubuntu-latest
+            pkg_manager: sudo apt-get update && sudo apt-get install -y
+            packages: gcc-aarch64-linux-gnu
+            dist: targz-pkg
+
+          - name: linux-arm-gnueabihf
+            cc: arm-linux-gnueabihf-gcc
+            runner: ubuntu-latest
+            pkg_manager: sudo apt-get update && sudo apt-get install -y
+            packages: gcc-arm-linux-gnueabihf
+            dist: targz-pkg
+
+          - name: linux-arm-gnueabi
+            cc: arm-linux-gnueabi-gcc
+            runner: ubuntu-latest
+            pkg_manager: sudo apt-get update && sudo apt-get install -y
+            packages: gcc-arm-linux-gnueabi
+            dist: targz-pkg
+
+          - name: macos-arm64
+            cc: clang
+            runner: macos-latest
+            pkg_manager: brew install
+            packages: coreutils
+            dist: targz-pkg
+
+          - name: macos-x86-64
+            cc: clang
+            runner: macos-15-intel
+            pkg_manager: brew install
+            packages: coreutils
+            dist: targz-pkg
+
+          - name: windows-i686
+            cc: i686-w64-mingw32-gcc
+            runner: ubuntu-latest
+            pkg_manager: sudo apt-get update && sudo apt-get install -y
+            packages: gcc-mingw-w64
+            dist: zip-pkg
+
+          - name: windows-x86_64
+            cc: x86_64-w64-mingw32-gcc
+            runner: ubuntu-latest
+            pkg_manager: sudo apt-get update && sudo apt-get install -y
+            packages: gcc-mingw-w64
+            dist: zip-pkg
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install
+        run: |
+          ${{ matrix.pkg_manager }} ${{ matrix.packages }}
+
+      - name: dist
+        run: |
+          make CC=${{ matrix.cc }} ${{ matrix.dist }}
+
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/*
+
+  release:
+    if: github.event_name != 'pull_request'
+    name: release
+    needs:
+      - dist
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: install commitizen
+        run: pip install commitizen
+
+      - name: get version
+        id: get_version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')
+          fi
+          echo "VERSION=$VERSION" | tee -a $GITHUB_OUTPUT
+
+      - name: generate changelog
+        run: |
+          cz changelog ${{ steps.get_version.outputs.VERSION }} --file-name changelog_body.md
+          cat changelog_body.md
+
+      - name: create release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: changelog_body.md
+          name: Version ${{ steps.get_version.outputs.version }}
+          draft: true
+          files: |
+            artifacts/**/*
