@@ -143,8 +143,7 @@ struct depfile *get_depfile(char *fn)
 	if (add_depfile_dep(&depfile, dep, c - dep))
 		goto err;
 
-	if (fp)
-		fclose(fp);
+	fclose(fp);
 
 	return &depfile;
 err:
@@ -252,8 +251,7 @@ struct config *get_config(char *fn)
 			goto err;
 	}
 
-	if (fp)
-		fclose(fp);
+	fclose(fp);
 
 	return &config;
 
@@ -408,10 +406,14 @@ int main(int argc, char **argv)
 	int rv;
 	int exit_code = EXIT_FAILURE;
 
-	if (argc < 2) {
+	if (argc == 2 &&
+	    (!strcmp(argv[1], "-v") || !strcmp(argv[1], "--version"))) {
 		fprintf(stderr, "version: %s\n", VERSION);
+		return EXIT_SUCCESS;
+	}
+
+	if (argc < 2) {
 		fprintf(stderr, "usage: esp-idf-configdep <cmd> <arg...>\n");
-		exit_code = EXIT_SUCCESS;
 		goto done;
 	}
 
