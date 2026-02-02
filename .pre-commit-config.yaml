@@ -1,6 +1,13 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 ---
+ci:
+  autofix_commit_msg: |
+    Apply automatic fixes from pre-commit hooks
+  autofix_prs: true
+  autoupdate_commit_msg: 'ci: Bump pre-commit hooks'
+  autoupdate_schedule: quarterly
+
 minimum_pre_commit_version: 3.3.0
 default_install_hook_types: [pre-commit,commit-msg]
 
@@ -27,10 +34,8 @@ repos:
       - id: check-copyright
         args: ['--config', 'check_copyright_config.yaml']
 
-  - repo: local
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v19.1.6
     hooks:
       - id: clang-format
-        name: clang-format
-        entry: make clang-format
-        language: system
-        pass_filenames: false
+        types_or: [c, c++]
