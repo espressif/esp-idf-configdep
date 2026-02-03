@@ -197,7 +197,7 @@ jobs:
           path: artifacts
 
       - name: install commitizen
-        run: pip install commitizen
+        run: pip install czespressif
 
       - name: get version
         id: get_version

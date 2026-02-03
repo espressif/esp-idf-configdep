@@ -1,4 +1,5 @@
 [tool.commitizen]
+name = "czespressif"
 version = "0.1.2"
 update_changelog_on_bump = true
 tag_format = "v$version"
@@ -8,16 +9,3 @@ bump_message = "change: Update version to $new_version"
 version_files = [
     "Makefile:^VERSION ="
 ]
-change_type_order = [
-    "BREAKING CHANGE",
-    "New Features",
-    "Bug Fixes",
-    "Code Refactoring",
-    "Performance Improvements"
-]
-
-[tool.commitizen.change_type_map]
-feat = "New Features"
-fix = "Bug Fixes"
-refactor = "Code Refactoring"
-perf = "Performance Improvements"

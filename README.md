@@ -4,7 +4,7 @@
 
 # esp-idf-configdep: sdkconfig.h dependency optimizer for C code
 
-**esp-idf-configdep** is a utility designed to optimize the ESP-IDF build process by
+**esp-idf-configdep** is a utility designed to optimize the [ESP-IDF](https://github.com/espressif/esp-idf) build process by
 refining how source files depend on configuration changes. In a standard build,
 the ESP-IDF system generates a generic `sdkconfig.h` file. Because most source
 files include this header, changing a single configuration option often
@@ -21,3 +21,53 @@ By scanning the source file for specific `CONFIG_*` reference strings,
 its actual configuration dependencies changes. This ensures that after a
 configuration update, only the directly affected source files are rebuilt,
 reducing incremental build times.
+
+## ESP-IDF Integration
+
+This tool is installed by default in [ESP-IDF](https://github.com/espressif/esp-idf) as part of the build system tools.
+
+For more information about ESP-IDF, visit:
+- [ESP-IDF GitHub Repository](https://github.com/espressif/esp-idf)
+- [ESP-IDF Documentation](https://docs.espressif.com/projects/esp-idf/)
+
+## Contributing
+
+Contributions to **esp-idf-configdep** are welcome! Please follow these guidelines:
+
+### Development Setup
+
+Before contributing, set up your development environment:
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/espressif/esp-idf-configdep.git
+   cd esp-idf-configdep
+   ```
+
+2. Install pre-commit hooks:
+   ```bash
+   pip install pre-commit
+   pre-commit install -t pre-commit -t commit-msg
+   ```
+
+   The pre-commit hooks will automatically run before each commit to check code formatting and commit message standards.
+
+### Code Standards
+
+- Follow the existing C code style (enforced by `clang-format`)
+- Ensure all commits follow the [Conventional Commits](https://www.conventionalcommits.org/) standard
+- Run the test suite before submitting pull requests
+
+### Submitting Changes
+
+1. Create a new branch for your changes
+2. Make your changes and ensure pre-commit checks pass
+3. Submit a pull request with a clear description of the changes
+
+For more details, see the pre-commit configuration in `.pre-commit-config.yaml`.
+
+## License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+
+Copyright 2026 Espressif Systems (Shanghai) CO LTD
