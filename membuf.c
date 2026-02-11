@@ -3,6 +3,13 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+
+/**
+ * @file membuf.c
+ * @brief Implementation of the lightweight memory buffer abstraction.
+ *
+ * See membuf.h for the public API and design rationale.
+ */
 #include "membuf.h"
 
 int membuf_init(struct membuf *mb, void *b, size_t s)
@@ -19,6 +26,7 @@ int membuf_init(struct membuf *mb, void *b, size_t s)
 	return 0;
 }
 
+/* Grow the buffer to at least s bytes, freeing any previous allocation. */
 int membuf_grow(struct membuf *mb, size_t s)
 {
 	if (s <= membuf_size(mb))
@@ -29,16 +37,19 @@ int membuf_grow(struct membuf *mb, size_t s)
 	return membuf_init_alloc(mb, s);
 }
 
+/* Return non-zero if the buffer has no usable data. */
 int membuf_empty(struct membuf *mb)
 {
 	return !membuf_buf(mb) || !membuf_size(mb);
 }
 
+/* Wrap an existing NUL-terminated C string (length derived via strlen). */
 int membuf_init_str(struct membuf *mb, char *s)
 {
 	return membuf_init(mb, s, strlen(s));
 }
 
+/* Allocate s bytes on the heap and initialise the membuf to own them. */
 int membuf_init_alloc(struct membuf *mb, size_t s)
 {
 	void *b;
@@ -61,6 +72,7 @@ int membuf_init_alloc(struct membuf *mb, size_t s)
 	return 0;
 }
 
+/* Free the buffer if dynamically allocated; always reset to empty state. */
 void membuf_free(struct membuf *mb)
 {
 	if (membuf_is_allocated(mb))
@@ -71,6 +83,7 @@ void membuf_free(struct membuf *mb)
 	membuf_clear_allocated(mb);
 }
 
+/* Reallocate the buffer to s bytes, preserving existing content. */
 int membuf_realloc(struct membuf *mb, size_t s)
 {
 	void *b;
@@ -100,6 +113,7 @@ int membuf_realloc(struct membuf *mb, size_t s)
 	return 0;
 }
 
+/* Convert all ASCII characters in the buffer to lowercase. */
 void membuf_lower(struct membuf *mb)
 {
 	char *end = membuf_end(mb);
@@ -111,6 +125,7 @@ void membuf_lower(struct membuf *mb)
 	}
 }
 
+/* Replace every occurrence of byte 'from' with byte 'to' in-place. */
 void membuf_replace(struct membuf *mb, char from, char to)
 {
 	char *end = membuf_end(mb);
@@ -123,6 +138,7 @@ void membuf_replace(struct membuf *mb, char from, char to)
 	}
 }
 
+/* Read the entire contents of a seekable file into the membuf. */
 ssize_t membuf_fread(struct membuf *mb, FILE *fp)
 {
 	ssize_t size;
@@ -156,6 +172,7 @@ ssize_t membuf_fread(struct membuf *mb, FILE *fp)
 	return size;
 }
 
+/* Write the entire membuf contents to a file. */
 ssize_t membuf_fwrite(struct membuf *mb, FILE *fp)
 {
 	if (fwrite(membuf_buf(mb), 1, membuf_size(mb), fp) != membuf_size(mb)) {
@@ -165,11 +182,13 @@ ssize_t membuf_fwrite(struct membuf *mb, FILE *fp)
 	return membuf_size(mb);
 }
 
+/* Find the first occurrence of byte c in the buffer. */
 void *membuf_chr(struct membuf *mb, int c)
 {
 	return memchr(membuf_buf(mb), c, membuf_size(mb));
 }
 
+/* Find the last occurrence of byte c in the buffer (reverse search). */
 void *membuf_rchr(struct membuf *mb, int c)
 {
 	unsigned char *end = membuf_buf(mb);
@@ -183,6 +202,7 @@ void *membuf_rchr(struct membuf *mb, int c)
 	return NULL;
 }
 
+/* Check if the buffer ends with the NUL-terminated string s. */
 void *membuf_endswith(struct membuf *mb, char *s)
 {
 	size_t s_len = strlen(s);
@@ -196,6 +216,7 @@ void *membuf_endswith(struct membuf *mb, char *s)
 	return end - s_len;
 }
 
+/* Lexicographic comparison of two membufs (memcmp semantics). */
 int membuf_cmp(struct membuf *mb1, struct membuf *mb2)
 {
 	int rv;
@@ -209,6 +230,7 @@ int membuf_cmp(struct membuf *mb1, struct membuf *mb2)
 	return rv;
 }
 
+/* Concatenate src_cnt membufs into dst, NUL-terminating the result. */
 ssize_t membuf_cat_mbs(struct membuf *dst, struct membuf **src, size_t src_cnt)
 {
 

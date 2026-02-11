@@ -3,6 +3,22 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+
+/**
+ * @file win.c
+ * @brief Windows-specific implementations.
+ *
+ * This file provides:
+ *  - exec_process()   -- child process creation via CreateProcessW.
+ *  - UTF-8 <-> wide-char string conversion helpers.
+ *  - UTF-8-aware wrappers for fprintf, vfprintf, fopen, and access
+ *    (overriding the standard CRT functions via macros in port.h).
+ *  - wmain() entry point that converts wide-char argv to UTF-8 and
+ *    delegates to main().
+ *
+ * All file-system and console operations go through wide-char Win32 APIs
+ * so that paths containing non-ASCII characters are handled correctly.
+ */
 #include <errhandlingapi.h>
 #include <fcntl.h>
 #include <io.h>
@@ -20,6 +36,16 @@
 #include "port.h"
 #include "utils.h"
 
+/**
+ * @brief Execute the compiler command as a child process (Windows).
+ *
+ * Retrieves the original wide-char command line via GetCommandLineW(),
+ * strips the wrapper's own executable name, and passes the remainder to
+ * CreateProcessW. Waits for the child to terminate and returns its exit code.
+ *
+ * @param argv  Unused on Windows (command line obtained from the OS).
+ * @return Exit code of the child process, or EXIT_FAILURE on error.
+ */
 int exec_process(char **argv)
 {
 #define CMDL_WC_CNT (1024 * 10)
@@ -27,6 +53,8 @@ int exec_process(char **argv)
 	static wchar_t cmdl_buf[CMDL_WC_CNT];
 	DEFINE_MEMBUF(cmdl, cmdl_buf, CMDL_WC_CNT * sizeof(wchar_t));
 
+	/* Get the full command line and skip past the wrapper executable name.
+	 * Handles quoted paths (e.g. "C:\Program Files\..."). */
 	wchar_t *c = GetCommandLineW();
 
 	int quotes = 0;
@@ -36,6 +64,7 @@ int exec_process(char **argv)
 		c++;
 	}
 
+	/* Skip whitespace between the wrapper name and the actual command. */
 	while (*c == L' ')
 		c++;
 
@@ -77,6 +106,18 @@ err:
 #undef CMDL_WC_CNT
 }
 
+/**
+ * @brief Convert a UTF-8 multibyte string to a wide-char string.
+ *
+ * If the destination membuf is too small and @p alloc is set, the buffer is
+ * grown to fit. If @p alloc is 0 and the buffer is insufficient, an error
+ * is reported immediately.
+ *
+ * @param mbs    NUL-terminated UTF-8 source string.
+ * @param wcs    Destination membuf for the wide-char result.
+ * @param alloc  If non-zero, allow the membuf to be grown on demand.
+ * @return Number of bytes written (including NUL), or 0 on error.
+ */
 size_t __mbs_to_wcs(const char *mbs, struct membuf *wcs, int alloc)
 {
 	int rv;
@@ -119,16 +160,28 @@ size_t __mbs_to_wcs(const char *mbs, struct membuf *wcs, int alloc)
 	return rv * sizeof(wchar_t);
 }
 
+/** Convert UTF-8 to wide-char, growing the membuf if needed. */
 size_t mbs_to_wcs(const char *mbs, struct membuf *wcs)
 {
 	return __mbs_to_wcs(mbs, wcs, 1);
 }
 
+/** Convert UTF-8 to wide-char without allocating (fail if buffer too small). */
 size_t mbs_to_wcs_noalloc(const char *mbs, struct membuf *wcs)
 {
 	return __mbs_to_wcs(mbs, wcs, 0);
 }
 
+/**
+ * @brief Convert a wide-char string to a UTF-8 multibyte string.
+ *
+ * Mirror of __mbs_to_wcs in the opposite direction.
+ *
+ * @param wcs    NUL-terminated wide-char source string.
+ * @param mbs    Destination membuf for the UTF-8 result.
+ * @param alloc  If non-zero, allow the membuf to be grown on demand.
+ * @return Number of bytes written (including NUL), or 0 on error.
+ */
 size_t __wcs_to_mbs(const wchar_t *wcs, struct membuf *mbs, int alloc)
 {
 	int rv;
@@ -172,16 +225,26 @@ size_t __wcs_to_mbs(const wchar_t *wcs, struct membuf *mbs, int alloc)
 	return rv;
 }
 
+/** Convert wide-char to UTF-8, growing the membuf if needed. */
 size_t wcs_to_mbs(const wchar_t *wcs, struct membuf *mbs)
 {
 	return __wcs_to_mbs(wcs, mbs, 1);
 }
 
+/** Convert wide-char to UTF-8 without allocating (fail if buffer too small). */
 size_t wcs_to_mbs_noalloc(const wchar_t *wcs, struct membuf *mbs)
 {
 	return __wcs_to_mbs(wcs, mbs, 0);
 }
 
+/**
+ * @brief UTF-8-aware vfprintf replacement for Windows.
+ *
+ * Formats the message into a UTF-8 buffer with vsnprintf, then either:
+ *  - writes raw bytes if the stream is redirected to a file/pipe, or
+ *  - converts to wide-char and uses WriteConsoleW for true console output
+ *    (preserving Unicode characters).
+ */
 int vfprintf_w(FILE *stream, const char *fmt, va_list args)
 {
 #define MSG_SIZE (1024 * 2)
@@ -237,6 +300,7 @@ err:
 #undef WMSG_WC_CNT
 }
 
+/** UTF-8-aware fprintf replacement. Delegates to vfprintf_w(). */
 int fprintf_w(FILE *stream, const char *fmt, ...)
 {
 	va_list args;
@@ -246,6 +310,12 @@ int fprintf_w(FILE *stream, const char *fmt, ...)
 	return rv;
 }
 
+/**
+ * @brief UTF-8-aware fopen replacement for Windows.
+ *
+ * Converts the UTF-8 filename and mode string to wide-char and calls
+ * _wfopen, which correctly handles non-ASCII paths.
+ */
 FILE *fopen_w(const char *fn, const char *mode)
 {
 #define FN_WC_CNT (1024 * 10)
@@ -279,6 +349,11 @@ err:
 #undef MODE_WC_CNT
 }
 
+/**
+ * @brief UTF-8-aware access() replacement for Windows.
+ *
+ * Converts the UTF-8 path to wide-char and calls _waccess.
+ */
 int access_w(const char *fn, int mode)
 {
 #define FN_WC_CNT (1024 * 10)
@@ -302,6 +377,13 @@ err:
 #undef FN_WC_CNT
 }
 
+/**
+ * @brief Windows wide-char entry point.
+ *
+ * Converts the wide-char argument vector to UTF-8 strings and delegates
+ * to main(). This is the true entry point on Windows (linked with
+ * -municode); main() is defined in configdep.c.
+ */
 int wmain(int argc, wchar_t **wargv)
 {
 #define ARGS_BUF_SIZE (1024 * 10 * 4)
