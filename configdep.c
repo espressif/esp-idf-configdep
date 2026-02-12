@@ -3,26 +3,75 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+
+/**
+ * @file configdep.c
+ * @brief Main module for esp-idf-configdep: sdkconfig.h dependency optimizer.
+ *
+ * This tool acts as a compiler wrapper. It:
+ *  1. Executes the real compiler command (forwarding all arguments).
+ *  2. Locates the dependency file produced by the compiler (-MF flag).
+ *  3. Parses the dependency file; if sdkconfig.h is listed as a dependency
+ *     it is removed.
+ *  4. Scans the source file for CONFIG_* references.
+ *  5. Rewrites the dependency file, replacing the single sdkconfig.h
+ *     dependency with granular per-option dummy header files (e.g.
+ *     my/option.h for CONFIG_MY_OPTION), but only for those that actually
+ *     exist on disk.
+ *
+ * This ensures that a source file is only rebuilt when the specific
+ * configuration options it references change, rather than on every
+ * sdkconfig.h modification.
+ */
 #include "membuf.h"
 #include "utils.h"
 
+/**
+ * @brief Parsed representation of a compiler-generated dependency (.d) file.
+ *
+ * A dependency file has the form:
+ *   target: dep1 dep2 ... depN
+ *
+ * This structure stores the target, the list of dependencies, whether
+ * sdkconfig.h was among them, and (if so) the directory prefix leading
+ * to sdkconfig.h so that per-option files can be located relative to it.
+ */
 struct depfile {
-	struct membuf data;
-	struct membuf target;
-	struct membuf sdkconfig_dir;
-	struct membuf deps;
-	size_t deps_cnt;
-	int sdkconfig;
-	char *fn;
+	struct membuf data;	     /**< Raw file content buffer. */
+	struct membuf target;	     /**< The make target (left of ':'). */
+	struct membuf sdkconfig_dir; /**< Directory prefix of sdkconfig.h. */
+	struct membuf deps;	     /**< Array of membuf dependency entries. */
+	size_t deps_cnt;	     /**< Number of entries in deps. */
+	int sdkconfig;		     /**< Non-zero if sdkconfig.h was found. */
+	char *fn;		     /**< Dependency file path. */
 };
 
+/**
+ * @brief CONFIG_* options extracted from a source file.
+ *
+ * Stores unique CONFIG_XYZ option names (without the "CONFIG_" prefix)
+ * found by scanning the source file contents.
+ */
 struct config {
-	struct membuf data;
-	struct membuf opts;
-	size_t opts_cnt;
-	char *fn;
+	struct membuf data; /**< Raw source file content buffer. */
+	struct membuf opts; /**< Array of membuf option-name entries. */
+	size_t opts_cnt;    /**< Number of unique options found. */
+	char *fn;	    /**< Source file path. */
 };
 
+/**
+ * @brief Check if a dependency path is sdkconfig.h and record its directory.
+ *
+ * If the dependency ends with "/sdkconfig.h" (or is exactly "sdkconfig.h"),
+ * sets depfile->sdkconfig = 1 and stores the directory prefix in
+ * depfile->sdkconfig_dir. This information is used later to locate
+ * per-option dummy header files in the same directory.
+ *
+ * @param depfile  Dependency file context.
+ * @param buf      Pointer to the dependency path string.
+ * @param size     Length of the dependency path.
+ * @return 0 if this was sdkconfig.h (consumed), 1 otherwise (not sdkconfig).
+ */
 int add_depfile_sdkconfig_dir(struct depfile *depfile, char *buf, size_t size)
 {
 	struct membuf dep;
@@ -49,6 +98,18 @@ int add_depfile_sdkconfig_dir(struct depfile *depfile, char *buf, size_t size)
 	return 0;
 }
 
+/**
+ * @brief Add a dependency entry to the depfile, filtering out sdkconfig.h.
+ *
+ * Empty entries are silently skipped. If the entry is sdkconfig.h it is
+ * consumed by add_depfile_sdkconfig_dir() and not added to the deps list.
+ * The deps array is dynamically doubled when it runs out of space.
+ *
+ * @param depfile  Dependency file context.
+ * @param buf      Pointer to the dependency path string.
+ * @param size     Length of the dependency path.
+ * @return 0 on success, -1 on allocation error.
+ */
 int add_depfile_dep(struct depfile *depfile, char *buf, size_t size)
 {
 	struct membuf *deps = membuf_buf(&depfile->deps);
@@ -72,12 +133,25 @@ int add_depfile_dep(struct depfile *depfile, char *buf, size_t size)
 	return 0;
 }
 
+/** Release resources held by a parsed depfile. */
 void put_depfile(struct depfile *depfile)
 {
 	membuf_free(&depfile->deps);
 	membuf_free(&depfile->data);
 }
 
+/**
+ * @brief Parse a compiler-generated dependency file.
+ *
+ * Reads the file, extracts the make target (everything before ':'), and
+ * splits the remaining content into individual dependency paths on
+ * whitespace boundaries, honouring backslash-newline line continuations.
+ * If sdkconfig.h is among the dependencies it is recorded but excluded
+ * from the deps list.
+ *
+ * @param fn  Path to the dependency (.d) file.
+ * @return Pointer to a static depfile structure, or NULL on error.
+ */
 struct depfile *get_depfile(char *fn)
 {
 #define DEPS_CNT (512)
@@ -158,6 +232,17 @@ err:
 #undef DATA_SIZE
 }
 
+/**
+ * @brief Add a unique CONFIG option name to the config's option list.
+ *
+ * Duplicates are detected by linear scan and silently skipped. The opts
+ * array is dynamically doubled when it runs out of space.
+ *
+ * @param config    Config context.
+ * @param opt       Pointer to the option name (after the "CONFIG_" prefix).
+ * @param opt_size  Length of the option name.
+ * @return 0 on success, -1 on allocation error.
+ */
 int add_config_opt(struct config *config, char *opt, size_t opt_size)
 {
 	struct membuf *opts = membuf_buf(&config->opts);
@@ -186,12 +271,24 @@ int add_config_opt(struct config *config, char *opt, size_t opt_size)
 	return 0;
 }
 
+/** Release resources held by a parsed config. */
 void put_config(struct config *config)
 {
 	membuf_free(&config->opts);
 	membuf_free(&config->data);
 }
 
+/**
+ * @brief Scan a source file for CONFIG_* references.
+ *
+ * Reads the entire file, then searches for the literal string "CONFIG_"
+ * followed by one or more uppercase letters, digits, or underscores.
+ * Each unique option name (the part after "CONFIG_") is stored in the
+ * returned config structure.
+ *
+ * @param fn  Path to the source file.
+ * @return Pointer to a static config structure, or NULL on error.
+ */
 struct config *get_config(char *fn)
 {
 #define OPTS_CNT (256)
@@ -267,6 +364,16 @@ err:
 #undef DATA_SIZE
 }
 
+/**
+ * @brief Extract the dependency file path from the compiler arguments.
+ *
+ * Searches for the "-MF" flag and returns the immediately following argument,
+ * which is the path to the generated dependency file.
+ *
+ * @param argc  Argument count.
+ * @param argv  Argument vector.
+ * @return Path to the dependency file, or NULL if -MF is not present.
+ */
 char *get_dep_fn(int argc, char *argv[])
 {
 	do {
@@ -278,8 +385,31 @@ char *get_dep_fn(int argc, char *argv[])
 	return NULL;
 }
 
+/**
+ * @brief Return the source file path from the compiler arguments.
+ *
+ * By convention the source file is the last argument in the compiler
+ * command line.
+ */
 char *get_src_fn(int argc, char *argv[]) { return argv[argc - 1]; }
 
+/**
+ * @brief Rewrite the dependency file with granular per-option dependencies.
+ *
+ * Overwrites the original dependency file with:
+ *  1. The original make target and colon.
+ *  2. All original dependencies *except* sdkconfig.h.
+ *  3. For each CONFIG_XYZ option found in the source, the corresponding
+ *     dummy header file (e.g. <sdkconfig_dir>/my/option.h for
+ *     CONFIG_MY_OPTION), but only if that file exists on disk.
+ *
+ * The option name is lowercased and underscores are replaced with '/'
+ * to derive the file path.
+ *
+ * @param depfile  Parsed dependency file (sdkconfig.h already filtered out).
+ * @param config   CONFIG_* options extracted from the source file.
+ * @return 0 on success, -1 on error.
+ */
 int fix_dep_file(struct depfile *depfile, struct config *config)
 {
 #define DEP_FN_SIZE (1024)
@@ -359,6 +489,7 @@ err:
 #undef DEP_FN_SIZE
 }
 
+/** Debug helper: dump depfile contents to stdout. */
 void dump_depfile(struct depfile *d)
 {
 	char *b;
@@ -383,6 +514,7 @@ void dump_depfile(struct depfile *d)
 	}
 }
 
+/** Debug helper: dump config options to stdout. */
 void dump_config(struct config *c)
 {
 	char *b;
@@ -398,6 +530,22 @@ void dump_config(struct config *c)
 	}
 }
 
+/**
+ * @brief Entry point for esp-idf-configdep.
+ *
+ * Workflow:
+ *  1. Handle --version / -v flag.
+ *  2. Execute the real compiler command via exec_process().
+ *  3. Look for "-MF <file>" in the arguments to find the dependency file.
+ *     If absent, the compiler was not asked to generate dependencies -- exit
+ *     successfully (nothing to optimise).
+ *  4. Parse the dependency file. If sdkconfig.h is not among the
+ *     dependencies, exit successfully (no optimisation needed).
+ *  5. Scan the source file for CONFIG_* references.
+ *  6. Rewrite the dependency file with per-option granular dependencies.
+ *
+ * @return EXIT_SUCCESS on success, EXIT_FAILURE on any error.
+ */
 int main(int argc, char **argv)
 {
 	struct depfile *depfile = NULL;
@@ -417,18 +565,22 @@ int main(int argc, char **argv)
 		goto done;
 	}
 
+	/* Step 1: Run the actual compiler command. */
 	rv = exec_process(argv);
 	if (rv) {
 		err("exec_process exited with error code: %d", rv);
 		goto done;
 	}
 
+	/* Step 2: Find the dependency file path (-MF argument). */
 	dep_fn = get_dep_fn(argc, argv);
 	if (!dep_fn) {
+		/* No -MF flag; nothing to optimise. */
 		exit_code = EXIT_SUCCESS;
 		goto done;
 	}
 
+	/* Step 3: Parse the dependency file. */
 	depfile = get_depfile(dep_fn);
 	if (!depfile)
 		goto done;
@@ -436,16 +588,19 @@ int main(int argc, char **argv)
 	// dump_depfile(depfile);
 
 	if (!depfile->sdkconfig) {
+		/* sdkconfig.h not in dependencies; nothing to optimise. */
 		exit_code = EXIT_SUCCESS;
 		goto done;
 	}
 
+	/* Step 4: Scan the source file for CONFIG_* references. */
 	config = get_config(get_src_fn(argc, argv));
 	if (!config)
 		goto done;
 
 	// dump_config(config);
 
+	/* Step 5: Rewrite the dep file with granular dependencies. */
 	if (fix_dep_file(depfile, config))
 		goto done;
 
