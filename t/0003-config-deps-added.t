@@ -20,7 +20,7 @@ EOF
 
 touch sdkconfig.h
 mkdir -p my
-touch my/option.h
+touch my/option.cdep
 
 $BINARY $CC -E -M -MF main.d main.c
 
@@ -30,7 +30,7 @@ else
     echo "not ok 1"
 fi
 
-if grep 'my/option.h' main.d; then
+if grep 'my/option.cdep' main.d; then
     echo "ok 2"
 else
     echo "not ok 2"

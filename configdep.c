@@ -15,8 +15,8 @@
  *     it is removed.
  *  4. Scans the source file for CONFIG_* references.
  *  5. Rewrites the dependency file, replacing the single sdkconfig.h
- *     dependency with granular per-option dummy header files (e.g.
- *     my/option.h for CONFIG_MY_OPTION), but only for those that actually
+ *     dependency with granular per-option dummy files (e.g.
+ *     my/option.cdep for CONFIG_MY_OPTION), but only for those that actually
  *     exist on disk.
  *
  * This ensures that a source file is only rebuilt when the specific
@@ -34,7 +34,7 @@
  *
  * This structure stores the target, the list of dependencies, whether
  * sdkconfig.h was among them, and (if so) the directory prefix leading
- * to sdkconfig.h so that per-option files can be located relative to it.
+ * to sdkconfig.h so that per-option .cdep files can be located relative to it.
  */
 struct depfile {
 	struct membuf data;	     /**< Raw file content buffer. */
@@ -65,7 +65,7 @@ struct config {
  * If the dependency ends with "/sdkconfig.h" (or is exactly "sdkconfig.h"),
  * sets depfile->sdkconfig = 1 and stores the directory prefix in
  * depfile->sdkconfig_dir. This information is used later to locate
- * per-option dummy header files in the same directory.
+ * per-option dummy files (.cdep) in the same directory.
  *
  * @param depfile  Dependency file context.
  * @param buf      Pointer to the dependency path string.
@@ -400,7 +400,7 @@ char *get_src_fn(int argc, char *argv[]) { return argv[argc - 1]; }
  *  1. The original make target and colon.
  *  2. All original dependencies *except* sdkconfig.h.
  *  3. For each CONFIG_XYZ option found in the source, the corresponding
- *     dummy header file (e.g. <sdkconfig_dir>/my/option.h for
+ *     dummy file (e.g. <sdkconfig_dir>/my/option.cdep for
  *     CONFIG_MY_OPTION), but only if that file exists on disk.
  *
  * The option name is lowercased and underscores are replaced with '/'
@@ -424,7 +424,7 @@ int fix_dep_file(struct depfile *depfile, struct config *config)
 
 	DEFINE_MEMBUF_STR(sep, " \\" EOL " ");
 	DEFINE_MEMBUF_STR(semi, ":");
-	DEFINE_MEMBUF_STR(ext, ".h");
+	DEFINE_MEMBUF_STR(ext, ".cdep");
 	DEFINE_MEMBUF_STR(slash, "/");
 	DEFINE_MEMBUF_STR(eol, EOL);
 
