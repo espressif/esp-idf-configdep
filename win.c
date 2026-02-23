@@ -147,7 +147,7 @@ size_t __mbs_to_wcs(const char *mbs, struct membuf *wcs, int alloc)
 		return 0;
 	}
 
-	if (membuf_grow(wcs, rv))
+	if (membuf_grow(wcs, rv * sizeof(wchar_t)))
 		return 0;
 
 	rv = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, membuf_buf(wcs), rv);
