@@ -15,7 +15,7 @@
 int membuf_init(struct membuf *mb, void *b, size_t s)
 {
 	if (s > MEMBUF_MAX_SIZE) {
-		err("size %zu exceeds maximum allowed %zu", MEMBUF_MAX_SIZE, s);
+		err("size %zu exceeds maximum allowed %zu", s, MEMBUF_MAX_SIZE);
 		return -1;
 	}
 
@@ -55,7 +55,7 @@ int membuf_init_alloc(struct membuf *mb, size_t s)
 	void *b;
 
 	if (s > MEMBUF_MAX_SIZE) {
-		err("size %zu exceeds maximum allowed %zu", MEMBUF_MAX_SIZE, s);
+		err("size %zu exceeds maximum allowed %zu", s, MEMBUF_MAX_SIZE);
 		return -1;
 	}
 
