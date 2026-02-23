@@ -265,14 +265,15 @@ int vfprintf_w(FILE *stream, const char *fmt, va_list args)
 	DWORD dwMode;
 
 	va_copy(args_copy, args);
-	n = vsnprintf(membuf_buf(&msg), membuf_size(&msg), fmt, args);
+	n = vsnprintf(membuf_buf(&msg), membuf_size(&msg), fmt, args_copy);
 	va_end(args_copy);
 	if (n >= membuf_size(&msg)) {
 		if (membuf_grow(&msg, n + 1))
 			goto err;
 
 		va_copy(args_copy, args);
-		n = vsnprintf(membuf_buf(&msg), membuf_size(&msg), fmt, args);
+		n = vsnprintf(membuf_buf(&msg), membuf_size(&msg), fmt,
+			      args_copy);
 		va_end(args_copy);
 	}
 
