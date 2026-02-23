@@ -191,10 +191,10 @@ void *membuf_chr(struct membuf *mb, int c)
 /* Find the last occurrence of byte c in the buffer (reverse search). */
 void *membuf_rchr(struct membuf *mb, int c)
 {
-	unsigned char *end = membuf_buf(mb);
-	unsigned char *beg = membuf_end(mb);
+	unsigned char *beg = membuf_buf(mb);
+	unsigned char *end = membuf_end(mb);
 
-	while (beg < end) {
+	while (end > beg) {
 		if (*--end == c)
 			return end;
 	}
