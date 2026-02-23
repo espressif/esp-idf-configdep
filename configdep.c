@@ -326,7 +326,7 @@ struct config *get_config(char *fn)
 	DEFINE_MEMBUF_STR(prefix, "CONFIG_");
 
 	while (c < end) {
-		int *n = membuf_buf(&prefix);
+		char *n = membuf_buf(&prefix);
 		c = memchr(c, *n, end - c);
 		if (!c)
 			break;
