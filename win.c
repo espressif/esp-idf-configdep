@@ -90,7 +90,7 @@ int exec_process(char **argv)
 	WaitForSingleObject(pi.hProcess, INFINITE);
 
 	if (!GetExitCodeProcess(pi.hProcess, &exitCode)) {
-		err("GetExitCodeProcess failed (%lu)", cmdl, GetLastError());
+		err("GetExitCodeProcess failed (%lu)", GetLastError());
 		exitCode = EXIT_FAILURE;
 	}
 
