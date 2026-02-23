@@ -142,7 +142,8 @@ size_t __mbs_to_wcs(const char *mbs, struct membuf *wcs, int alloc)
 
 	rv = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, NULL, 0);
 	if (!rv) {
-		err_raw("MultiByteToWideChar size failed (%lu)", rv);
+		err_raw("MultiByteToWideChar size failed (%lu)",
+			GetLastError());
 		return 0;
 	}
 
