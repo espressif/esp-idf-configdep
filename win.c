@@ -395,12 +395,12 @@ int wmain(int argc, wchar_t **wargv)
 	char *args;
 
 	static char *argv_buf[ARGV_BUF_SIZE];
-	DEFINE_MEMBUF(argv_mb, argv_buf, ARGS_BUF_SIZE);
+	DEFINE_MEMBUF(argv_mb, argv_buf, ARGV_BUF_SIZE * sizeof(char *));
 	char **argv;
 
 	int rv = EXIT_FAILURE;
 
-	if (membuf_grow(&argv_mb, argc + 1)) {
+	if (membuf_grow(&argv_mb, (argc + 1) * sizeof(char *))) {
 		err_errno("argv malloc failed");
 		goto err;
 	}
