@@ -195,7 +195,7 @@ size_t __wcs_to_mbs(const wchar_t *wcs, struct membuf *mbs, int alloc)
 
 	if (!alloc) {
 		err = GetLastError();
-		err_raw("WideCharToMultiByte failed (%lu)", err);
+		err("WideCharToMultiByte failed (%lu)", err);
 		return 0;
 	}
 
