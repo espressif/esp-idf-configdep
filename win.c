@@ -90,7 +90,7 @@ int exec_process(char **argv)
 	WaitForSingleObject(pi.hProcess, INFINITE);
 
 	if (!GetExitCodeProcess(pi.hProcess, &exitCode)) {
-		err("GetExitCodeProcess failed (%lu)", cmdl, GetLastError());
+		err("GetExitCodeProcess failed (%lu)", GetLastError());
 		exitCode = EXIT_FAILURE;
 	}
 
@@ -142,11 +142,12 @@ size_t __mbs_to_wcs(const char *mbs, struct membuf *wcs, int alloc)
 
 	rv = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, NULL, 0);
 	if (!rv) {
-		err_raw("MultiByteToWideChar size failed (%lu)", rv);
+		err_raw("MultiByteToWideChar size failed (%lu)",
+			GetLastError());
 		return 0;
 	}
 
-	if (membuf_grow(wcs, rv))
+	if (membuf_grow(wcs, rv * sizeof(wchar_t)))
 		return 0;
 
 	rv = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, membuf_buf(wcs), rv);
@@ -194,7 +195,7 @@ size_t __wcs_to_mbs(const wchar_t *wcs, struct membuf *mbs, int alloc)
 
 	if (!alloc) {
 		err = GetLastError();
-		err_raw("MultiByteToWideChar failed (%lu)", err);
+		err("WideCharToMultiByte failed (%lu)", err);
 		return 0;
 	}
 
@@ -265,14 +266,15 @@ int vfprintf_w(FILE *stream, const char *fmt, va_list args)
 	DWORD dwMode;
 
 	va_copy(args_copy, args);
-	n = vsnprintf(membuf_buf(&msg), membuf_size(&msg), fmt, args);
+	n = vsnprintf(membuf_buf(&msg), membuf_size(&msg), fmt, args_copy);
 	va_end(args_copy);
 	if (n >= membuf_size(&msg)) {
 		if (membuf_grow(&msg, n + 1))
 			goto err;
 
 		va_copy(args_copy, args);
-		n = vsnprintf(membuf_buf(&msg), membuf_size(&msg), fmt, args);
+		n = vsnprintf(membuf_buf(&msg), membuf_size(&msg), fmt,
+			      args_copy);
 		va_end(args_copy);
 	}
 
@@ -394,12 +396,12 @@ int wmain(int argc, wchar_t **wargv)
 	char *args;
 
 	static char *argv_buf[ARGV_BUF_SIZE];
-	DEFINE_MEMBUF(argv_mb, argv_buf, ARGS_BUF_SIZE);
+	DEFINE_MEMBUF(argv_mb, argv_buf, ARGV_BUF_SIZE * sizeof(char *));
 	char **argv;
 
 	int rv = EXIT_FAILURE;
 
-	if (membuf_grow(&argv_mb, argc + 1)) {
+	if (membuf_grow(&argv_mb, (argc + 1) * sizeof(char *))) {
 		err_errno("argv malloc failed");
 		goto err;
 	}

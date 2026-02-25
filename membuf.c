@@ -15,7 +15,7 @@
 int membuf_init(struct membuf *mb, void *b, size_t s)
 {
 	if (s > MEMBUF_MAX_SIZE) {
-		err("size %zu exceeds maximum allowed %zu", MEMBUF_MAX_SIZE, s);
+		err("size %zu exceeds maximum allowed %zu", s, MEMBUF_MAX_SIZE);
 		return -1;
 	}
 
@@ -55,7 +55,7 @@ int membuf_init_alloc(struct membuf *mb, size_t s)
 	void *b;
 
 	if (s > MEMBUF_MAX_SIZE) {
-		err("size %zu exceeds maximum allowed %zu", MEMBUF_MAX_SIZE, s);
+		err("size %zu exceeds maximum allowed %zu", s, MEMBUF_MAX_SIZE);
 		return -1;
 	}
 
@@ -191,10 +191,10 @@ void *membuf_chr(struct membuf *mb, int c)
 /* Find the last occurrence of byte c in the buffer (reverse search). */
 void *membuf_rchr(struct membuf *mb, int c)
 {
-	unsigned char *end = membuf_buf(mb);
-	unsigned char *beg = membuf_end(mb);
+	unsigned char *beg = membuf_buf(mb);
+	unsigned char *end = membuf_end(mb);
 
-	while (beg < end) {
+	while (end > beg) {
 		if (*--end == c)
 			return end;
 	}

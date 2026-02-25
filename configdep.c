@@ -295,7 +295,7 @@ struct config *get_config(char *fn)
 #define DATA_SIZE (1024 * 10 * 3)
 
 	static struct membuf opts[OPTS_CNT];
-	static int data[DATA_SIZE];
+	static char data[DATA_SIZE];
 	ssize_t data_size;
 	static struct config config;
 	FILE *fp = NULL;
@@ -326,7 +326,7 @@ struct config *get_config(char *fn)
 	DEFINE_MEMBUF_STR(prefix, "CONFIG_");
 
 	while (c < end) {
-		int *n = membuf_buf(&prefix);
+		char *n = membuf_buf(&prefix);
 		c = memchr(c, *n, end - c);
 		if (!c)
 			break;
