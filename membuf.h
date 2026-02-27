@@ -154,16 +154,6 @@ void membuf_free(struct membuf *mb);
 int membuf_realloc(struct membuf *mb, size_t s);
 
 /**
- * @brief Extend the buffer by @p s bytes, optionally preserving content.
- *
- * @param mb  Buffer descriptor.
- * @param s   Number of additional bytes.
- * @param cp  If non-zero, copy existing data into the new buffer.
- * @return 0 on success, -1 on error.
- */
-int membuf_extend(struct membuf *mb, size_t s, int cp);
-
-/**
  * @brief Convert all ASCII characters in the buffer to lowercase in-place.
  *
  * @param mb  Buffer descriptor.
@@ -234,13 +224,6 @@ void *membuf_endswith(struct membuf *mb, char *s);
  * @return 0 if equal, negative if mb1 < mb2, positive if mb1 > mb2.
  */
 int membuf_cmp(struct membuf *mb1, struct membuf *mb2);
-
-/**
- * @brief Dump the membuf contents to stdout for debugging.
- *
- * @param mb  Buffer descriptor.
- */
-void membuf_dump(struct membuf *mb);
 
 /**
  * @brief Concatenate multiple membufs into @p dst.
