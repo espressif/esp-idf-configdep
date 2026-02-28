@@ -25,7 +25,7 @@
  *
  * If the destination membuf is too small and @p alloc is set, the buffer is
  * grown to fit. If @p alloc is 0 and the buffer is insufficient, an error
- * is reported immediately.
+ * is reported and 0 is returned.
  *
  * @param mbs    NUL-terminated UTF-8 source string.
  * @param wcs    Destination membuf for the wide-char result.
@@ -35,40 +35,27 @@
 static size_t mbs_to_wcs_impl(const char *mbs, struct membuf *wcs, int alloc)
 {
 	int rv;
-	DWORD err;
-
-	rv = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, membuf_buf(wcs),
-				 membuf_size(wcs) / sizeof(wchar_t));
-	if (rv)
-		return rv * sizeof(wchar_t);
-
-	if (!alloc) {
-		err = GetLastError();
-		err_raw("MultiByteToWideChar failed (%lu)", err);
-		return 0;
-	}
-
-	err = GetLastError();
-	if (err != ERROR_INSUFFICIENT_BUFFER) {
-		err_raw("MultiByteToWideChar failed (%lu)", err);
-		return 0;
-	}
 
 	rv = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, NULL, 0);
 	if (!rv) {
-		err_raw("MultiByteToWideChar size failed (%lu)",
-			GetLastError());
+		err_raw("MultiByteToWideChar failed (%lu)", GetLastError());
 		return 0;
 	}
 
-	if (membuf_grow(wcs, rv * sizeof(wchar_t)))
-		return 0;
+	if (rv * sizeof(wchar_t) > membuf_size(wcs)) {
+		if (!alloc) {
+			err_raw("mbs_to_wcs: buffer too small (%zu < %zu)",
+				membuf_size(wcs),
+				(size_t)(rv * sizeof(wchar_t)));
+			return 0;
+		}
+		if (membuf_grow(wcs, rv * sizeof(wchar_t)))
+			return 0;
+	}
 
 	rv = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, membuf_buf(wcs), rv);
 	if (!rv) {
-		err = GetLastError();
-		err_raw("MultiByteToWideChar for malloc buffer failed (%lu)",
-			err);
+		err_raw("MultiByteToWideChar failed (%lu)", GetLastError());
 		return 0;
 	}
 
@@ -92,6 +79,10 @@ size_t mbs_to_wcs_noalloc(const char *mbs, struct membuf *wcs)
  *
  * Mirror of mbs_to_wcs_impl in the opposite direction.
  *
+ * If the destination membuf is too small and @p alloc is set, the buffer is
+ * grown to fit. If @p alloc is 0 and the buffer is insufficient, an error
+ * is reported and 0 is returned.
+ *
  * @param wcs    NUL-terminated wide-char source string.
  * @param mbs    Destination membuf for the UTF-8 result.
  * @param alloc  If non-zero, allow the membuf to be grown on demand.
@@ -100,40 +91,27 @@ size_t mbs_to_wcs_noalloc(const char *mbs, struct membuf *wcs)
 static size_t wcs_to_mbs_impl(const wchar_t *wcs, struct membuf *mbs, int alloc)
 {
 	int rv;
-	DWORD err;
-
-	rv = WideCharToMultiByte(CP_UTF8, 0, wcs, -1, membuf_buf(mbs),
-				 membuf_size(mbs), NULL, NULL);
-	if (rv)
-		return rv;
-
-	if (!alloc) {
-		err = GetLastError();
-		err("WideCharToMultiByte failed (%lu)", err);
-		return 0;
-	}
-
-	err = GetLastError();
-	if (err != ERROR_INSUFFICIENT_BUFFER) {
-		err("WideCharToMultiByte failed (%lu)", err);
-		return 0;
-	}
 
 	rv = WideCharToMultiByte(CP_UTF8, 0, wcs, -1, NULL, 0, NULL, NULL);
 	if (!rv) {
-		err = GetLastError();
-		err("WideCharToMultiByte size failed (%lu)", err);
+		err("WideCharToMultiByte failed (%lu)", GetLastError());
 		return 0;
 	}
 
-	if (membuf_grow(mbs, rv))
-		return 0;
+	if ((size_t)rv > membuf_size(mbs)) {
+		if (!alloc) {
+			err("wcs_to_mbs: buffer too small (%zu < %zu)",
+			    membuf_size(mbs), (size_t)rv);
+			return 0;
+		}
+		if (membuf_grow(mbs, rv))
+			return 0;
+	}
 
 	rv = WideCharToMultiByte(CP_UTF8, 0, wcs, -1, membuf_buf(mbs), rv, NULL,
 				 NULL);
 	if (!rv) {
-		err = GetLastError();
-		err("WideCharToMultiByte for malloc buffer failed (%lu)", err);
+		err("WideCharToMultiByte failed (%lu)", GetLastError());
 		return 0;
 	}
 
