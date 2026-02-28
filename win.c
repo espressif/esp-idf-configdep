@@ -71,7 +71,7 @@ int exec_process(char **argv)
 
 	wcscpy(membuf_buf(&cmdl), c);
 
-	STARTUPINFO si;
+	STARTUPINFOW si;
 	PROCESS_INFORMATION pi;
 	DWORD exitCode;
 
