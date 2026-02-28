@@ -26,7 +26,7 @@ jobs:
         run: make CC=clang clang-format clang-tidy
 
       - name: test
-        run: make CC=clang test
+        run: make CC=clang PFLAGS=-v test
 
   test-windows:
     name: test windows
@@ -51,7 +51,7 @@ jobs:
 
       - name: test
         shell: msys2 {0}
-        run: make CC=clang test
+        run: make CC=clang PFLAGS=-v test
 
   test-macos:
     name: test macos
@@ -68,7 +68,7 @@ jobs:
         run: make CC=clang clang-format clang-tidy
 
       - name: test
-        run: make CC=clang test
+        run: make CC=clang PFLAGS=-v test
 
   dist:
     runs-on: ${{ matrix.runner }}
