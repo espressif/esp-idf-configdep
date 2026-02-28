@@ -30,10 +30,6 @@
 
 typedef ptrdiff_t ssize_t;
 
-/* Forward-declare main so that wmain (the Windows wide-char entry point
- * implemented in win.c) can call it after converting arguments to UTF-8. */
-int main(int, char **);
-
 /* UTF-8-aware replacements for standard I/O and filesystem functions. */
 int fprintf_w(FILE *, const char *, ...);
 int vfprintf_w(FILE *, const char *, va_list);

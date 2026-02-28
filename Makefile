@@ -59,7 +59,7 @@ SRCS := configdep.c \
 
 ifeq ($(S), win)
 
-SRCS += win.c
+SRCS += win.c wconv.c wmain.c
 CFLAGS += -municode
 LDFLAGS += -municode
 BINARY := $(O)/$(NAME).exe
