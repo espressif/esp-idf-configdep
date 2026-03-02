@@ -59,7 +59,7 @@ SRCS := configdep.c \
 
 ifeq ($(S), win)
 
-SRCS += win.c
+SRCS += win.c wconv.c wmain.c
 CFLAGS += -municode
 LDFLAGS += -municode
 BINARY := $(O)/$(NAME).exe
@@ -168,7 +168,7 @@ clang-tidy:
 
 BINARY_ABS := $(abspath $(BINARY))
 test: $(BINARY)
-	T_OUT=$(T_OUT) BINARY=$(BINARY_ABS) CC=${CC} prove $(PFLAGS) $(T)
+	T_OUT=$(T_OUT) BINARY=$(BINARY_ABS) CC=${CC} S=$(S) prove $(PFLAGS) $(T)
 
 
 cscope:

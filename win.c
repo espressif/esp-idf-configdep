@@ -10,11 +10,8 @@
  *
  * This file provides:
  *  - exec_process()   -- child process creation via CreateProcessW.
- *  - UTF-8 <-> wide-char string conversion helpers.
  *  - UTF-8-aware wrappers for fprintf, vfprintf, fopen, and access
  *    (overriding the standard CRT functions via macros in port.h).
- *  - wmain() entry point that converts wide-char argv to UTF-8 and
- *    delegates to main().
  *
  * All file-system and console operations go through wide-char Win32 APIs
  * so that paths containing non-ASCII characters are handled correctly.
@@ -35,6 +32,7 @@
 #include "membuf.h"
 #include "port.h"
 #include "utils.h"
+#include "wconv.h"
 
 /**
  * @brief Execute the compiler command as a child process (Windows).
@@ -73,7 +71,7 @@ int exec_process(char **argv)
 
 	wcscpy(membuf_buf(&cmdl), c);
 
-	STARTUPINFO si;
+	STARTUPINFOW si;
 	PROCESS_INFORMATION pi;
 	DWORD exitCode;
 
@@ -104,138 +102,6 @@ err:
 	return EXIT_FAILURE;
 
 #undef CMDL_WC_CNT
-}
-
-/**
- * @brief Convert a UTF-8 multibyte string to a wide-char string.
- *
- * If the destination membuf is too small and @p alloc is set, the buffer is
- * grown to fit. If @p alloc is 0 and the buffer is insufficient, an error
- * is reported immediately.
- *
- * @param mbs    NUL-terminated UTF-8 source string.
- * @param wcs    Destination membuf for the wide-char result.
- * @param alloc  If non-zero, allow the membuf to be grown on demand.
- * @return Number of bytes written (including NUL), or 0 on error.
- */
-size_t __mbs_to_wcs(const char *mbs, struct membuf *wcs, int alloc)
-{
-	int rv;
-	DWORD err;
-
-	rv = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, membuf_buf(wcs),
-				 membuf_size(wcs) / sizeof(wchar_t));
-	if (rv)
-		return rv * sizeof(wchar_t);
-
-	if (!alloc) {
-		err = GetLastError();
-		err_raw("MultiByteToWideChar failed (%lu)", err);
-		return 0;
-	}
-
-	err = GetLastError();
-	if (err != ERROR_INSUFFICIENT_BUFFER) {
-		err_raw("MultiByteToWideChar failed (%lu)", err);
-		return 0;
-	}
-
-	rv = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, NULL, 0);
-	if (!rv) {
-		err_raw("MultiByteToWideChar size failed (%lu)",
-			GetLastError());
-		return 0;
-	}
-
-	if (membuf_grow(wcs, rv * sizeof(wchar_t)))
-		return 0;
-
-	rv = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, membuf_buf(wcs), rv);
-	if (!rv) {
-		err = GetLastError();
-		err_raw("MultiByteToWideChar for malloc buffer failed (%lu)",
-			err);
-		return 0;
-	}
-
-	return rv * sizeof(wchar_t);
-}
-
-/** Convert UTF-8 to wide-char, growing the membuf if needed. */
-size_t mbs_to_wcs(const char *mbs, struct membuf *wcs)
-{
-	return __mbs_to_wcs(mbs, wcs, 1);
-}
-
-/** Convert UTF-8 to wide-char without allocating (fail if buffer too small). */
-size_t mbs_to_wcs_noalloc(const char *mbs, struct membuf *wcs)
-{
-	return __mbs_to_wcs(mbs, wcs, 0);
-}
-
-/**
- * @brief Convert a wide-char string to a UTF-8 multibyte string.
- *
- * Mirror of __mbs_to_wcs in the opposite direction.
- *
- * @param wcs    NUL-terminated wide-char source string.
- * @param mbs    Destination membuf for the UTF-8 result.
- * @param alloc  If non-zero, allow the membuf to be grown on demand.
- * @return Number of bytes written (including NUL), or 0 on error.
- */
-size_t __wcs_to_mbs(const wchar_t *wcs, struct membuf *mbs, int alloc)
-{
-	int rv;
-	DWORD err;
-
-	rv = WideCharToMultiByte(CP_UTF8, 0, wcs, -1, membuf_buf(mbs),
-				 membuf_size(mbs), NULL, NULL);
-	if (rv)
-		return rv;
-
-	if (!alloc) {
-		err = GetLastError();
-		err("WideCharToMultiByte failed (%lu)", err);
-		return 0;
-	}
-
-	err = GetLastError();
-	if (err != ERROR_INSUFFICIENT_BUFFER) {
-		err("WideCharToMultiByte failed (%lu)", err);
-		return 0;
-	}
-
-	rv = WideCharToMultiByte(CP_UTF8, 0, wcs, -1, NULL, 0, NULL, NULL);
-	if (!rv) {
-		err = GetLastError();
-		err("WideCharToMultiByte size failed (%lu)", err);
-		return 0;
-	}
-
-	if (membuf_grow(mbs, rv))
-		return 0;
-
-	rv = WideCharToMultiByte(CP_UTF8, 0, wcs, -1, membuf_buf(mbs), rv, NULL,
-				 NULL);
-	if (!rv) {
-		err = GetLastError();
-		err("WideCharToMultiByte for malloc buffer failed (%lu)", err);
-		return 0;
-	}
-
-	return rv;
-}
-
-/** Convert wide-char to UTF-8, growing the membuf if needed. */
-size_t wcs_to_mbs(const wchar_t *wcs, struct membuf *mbs)
-{
-	return __wcs_to_mbs(wcs, mbs, 1);
-}
-
-/** Convert wide-char to UTF-8 without allocating (fail if buffer too small). */
-size_t wcs_to_mbs_noalloc(const wchar_t *wcs, struct membuf *mbs)
-{
-	return __wcs_to_mbs(wcs, mbs, 0);
 }
 
 /**
@@ -377,72 +243,4 @@ err:
 	return rv;
 
 #undef FN_WC_CNT
-}
-
-/**
- * @brief Windows wide-char entry point.
- *
- * Converts the wide-char argument vector to UTF-8 strings and delegates
- * to main(). This is the true entry point on Windows (linked with
- * -municode); main() is defined in configdep.c.
- */
-int wmain(int argc, wchar_t **wargv)
-{
-#define ARGS_BUF_SIZE (1024 * 10 * 4)
-#define ARGV_BUF_SIZE (1024)
-
-	static char args_buf[ARGS_BUF_SIZE];
-	DEFINE_MEMBUF(args_mb, args_buf, ARGS_BUF_SIZE);
-	char *args;
-
-	static char *argv_buf[ARGV_BUF_SIZE];
-	DEFINE_MEMBUF(argv_mb, argv_buf, ARGV_BUF_SIZE * sizeof(char *));
-	char **argv;
-
-	int rv = EXIT_FAILURE;
-
-	if (membuf_grow(&argv_mb, (argc + 1) * sizeof(char *))) {
-		err_errno("argv malloc failed");
-		goto err;
-	}
-
-	if (membuf_grow(&args_mb, wcslen(GetCommandLineW()) * 4 + argc)) {
-		err("args malloc failed");
-		goto err;
-	}
-
-	args = membuf_buf(&args_mb);
-	argv = membuf_buf(&argv_mb);
-
-	size_t remaining = membuf_size(&args_mb);
-	size_t offset = 0;
-	size_t cnt = 0;
-	DEFINE_MEMBUF_EMPTY(arg_mb);
-	for (int i = 0; i < argc; i++) {
-		if (membuf_init(&arg_mb, args + offset, remaining)) {
-			err("arg buffer initialization failed");
-			goto err;
-		}
-
-		cnt = wcs_to_mbs_noalloc(wargv[i], &arg_mb);
-		if (!cnt) {
-			err("args conversion failed");
-			goto err;
-		}
-
-		argv[i] = membuf_buf(&arg_mb);
-		offset += cnt;
-		remaining -= cnt;
-	}
-
-	argv[argc] = NULL;
-
-	rv = main(argc, argv);
-err:
-	membuf_free(&args_mb);
-	membuf_free(&argv_mb);
-	return rv;
-
-#undef ARGS_BUF_SIZE
-#undef ARGV_BUF_SIZE
 }
