@@ -46,7 +46,7 @@
  */
 int exec_process(char **argv)
 {
-#define CMDL_WC_CNT (1024 * 10)
+#define CMDL_WC_CNT ((size_t)1024 * 10)
 
 	static wchar_t cmdl_buf[CMDL_WC_CNT];
 	DEFINE_MEMBUF(cmdl, cmdl_buf, CMDL_WC_CNT * sizeof(wchar_t));
@@ -96,7 +96,7 @@ int exec_process(char **argv)
 	CloseHandle(pi.hThread);
 	membuf_free(&cmdl);
 
-	return exitCode;
+	return (int)exitCode;
 err:
 	membuf_free(&cmdl);
 	return EXIT_FAILURE;
@@ -114,8 +114,8 @@ err:
  */
 int vfprintf_w(FILE *stream, const char *fmt, va_list args)
 {
-#define MSG_SIZE (1024 * 2)
-#define WMSG_WC_CNT (1024 * 2)
+#define MSG_SIZE ((size_t)1024 * 2)
+#define WMSG_WC_CNT ((size_t)1024 * 2)
 
 	static char msg_buf[MSG_SIZE];
 	DEFINE_MEMBUF(msg, msg_buf, MSG_SIZE);
@@ -128,6 +128,7 @@ int vfprintf_w(FILE *stream, const char *fmt, va_list args)
 
 	va_list args_copy;
 
+	/* NOLINTNEXTLINE(performance-no-int-to-ptr) */
 	HANDLE h = (HANDLE)_get_osfhandle(_fileno(stream));
 	DWORD dwMode;
 
@@ -145,7 +146,7 @@ int vfprintf_w(FILE *stream, const char *fmt, va_list args)
 	}
 
 	if (!GetConsoleMode(h, &dwMode)) {
-		rv = fwrite(membuf_buf(&msg), 1, n, stream);
+		rv = (int)fwrite(membuf_buf(&msg), 1, (size_t)n, stream);
 		if (rv != n)
 			goto err;
 	} else {
@@ -186,7 +187,7 @@ int fprintf_w(FILE *stream, const char *fmt, ...)
  */
 FILE *fopen_w(const char *fn, const char *mode)
 {
-#define FN_WC_CNT (1024 * 10)
+#define FN_WC_CNT ((size_t)1024 * 10)
 #define MODE_WC_CNT 16
 
 	static wchar_t wfn_buf[FN_WC_CNT];
@@ -224,7 +225,7 @@ err:
  */
 int access_w(const char *fn, int mode)
 {
-#define FN_WC_CNT (1024 * 10)
+#define FN_WC_CNT ((size_t)1024 * 10)
 
 	static wchar_t wfn_buf[FN_WC_CNT];
 	DEFINE_MEMBUF(wfn, wfn_buf, FN_WC_CNT * sizeof(wchar_t));
@@ -237,6 +238,36 @@ int access_w(const char *fn, int mode)
 	}
 
 	rv = _waccess(membuf_buf(&wfn), mode);
+err:
+	membuf_free(&wfn);
+
+	return rv;
+
+#undef FN_WC_CNT
+}
+
+/**
+ * @brief UTF-8-aware mkdir() replacement for Windows.
+ *
+ * Converts the UTF-8 path to wide-char and calls _wmkdir.
+ * The mode parameter is ignored on Windows.
+ */
+int mkdir_w(const char *path, int mode)
+{
+#define FN_WC_CNT ((size_t)1024 * 10)
+
+	static wchar_t wfn_buf[FN_WC_CNT];
+	DEFINE_MEMBUF(wfn, wfn_buf, FN_WC_CNT * sizeof(wchar_t));
+
+	int rv = -1;
+	(void)mode;
+
+	if (!mbs_to_wcs(path, &wfn)) {
+		errno = ENOMEM;
+		goto err;
+	}
+
+	rv = _wmkdir(membuf_buf(&wfn));
 err:
 	membuf_free(&wfn);
 

@@ -21,8 +21,8 @@
  *  - membuf_fread / membuf_fwrite for file I/O.
  *  - membuf_cat for concatenating multiple buffers into a destination.
  */
-#ifndef _MEMBUF_H_
-#define _MEMBUF_H_
+#ifndef MEMBUF_H
+#define MEMBUF_H
 
 #include "utils.h"
 
@@ -160,14 +160,22 @@ int membuf_realloc(struct membuf *mb, size_t s);
  */
 void membuf_lower(struct membuf *mb);
 
-/**
- * @brief Replace every occurrence of byte @p from with @p to in-place.
- *
- * @param mb    Buffer descriptor.
- * @param from  Byte value to search for.
- * @param to    Replacement byte value.
+/** Pair of bytes for membuf_replace.  Always use designated initializers
+ *  ({.from = ..., .to = ...}) so the intent is unambiguous.
  */
-void membuf_replace(struct membuf *mb, char from, char to);
+typedef struct membuf_byte_pair {
+	char from;
+	char to;
+} membuf_byte_pair;
+
+/**
+ * @brief Replace every occurrence of byte @p repl.from with @p repl.to
+ * in-place.
+ *
+ * @param mb   Buffer descriptor.
+ * @param repl Search byte and replacement byte.
+ */
+void membuf_replace(struct membuf *mb, membuf_byte_pair repl);
 
 /**
  * @brief Read an entire file into the membuf, growing it if necessary.
@@ -248,4 +256,4 @@ ssize_t membuf_cat_mbs(struct membuf *dst, struct membuf **src, size_t src_cnt);
 		       sizeof((struct membuf *[]){__VA_ARGS__}) /              \
 			   sizeof(struct membuf *))
 
-#endif // _MEMBUF_H_
+#endif // MEMBUF_H

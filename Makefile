@@ -158,6 +158,7 @@ clean:
 clang-format:
 	clang-format --style=file -i *.[ch]
 
+# Lint checks and WarningsAsErrors: see .clang-tidy in this directory.
 clang-tidy:
 	clang-tidy \
 		--extra-arg="--target=$(DUMPMACHINE)" \

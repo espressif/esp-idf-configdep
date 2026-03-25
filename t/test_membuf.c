@@ -165,12 +165,14 @@ int main(void)
 	{
 		char data1[] = "a-b-c-d";
 		DEFINE_MEMBUF(mb1, data1, 7);
-		membuf_replace(&mb1, '-', '_');
+		membuf_replace(&mb1,
+			       (membuf_byte_pair){.from = '-', .to = '_'});
 		tap_check(memcmp(data1, "a_b_c_d", 7) == 0);
 
 		char data2[] = "abcd";
 		DEFINE_MEMBUF(mb2, data2, 4);
-		membuf_replace(&mb2, 'x', 'y');
+		membuf_replace(&mb2,
+			       (membuf_byte_pair){.from = 'x', .to = 'y'});
 		tap_check(memcmp(data2, "abcd", 4) == 0);
 		tap_done("membuf_replace replaces characters");
 	}

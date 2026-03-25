@@ -155,7 +155,7 @@ void put_depfile(struct depfile *depfile)
 struct depfile *get_depfile(char *fn)
 {
 #define DEPS_CNT (512)
-#define DATA_SIZE (1024 * 7)
+#define DATA_SIZE ((size_t)1024 * 7)
 
 	static struct membuf deps[DEPS_CNT];
 	static char data[DATA_SIZE];
@@ -334,7 +334,7 @@ struct config *get_config(char *fn)
 		if (end - c < membuf_size(&prefix))
 			break;
 
-		if (memcmp(c, membuf_buf(&prefix), membuf_size(&prefix))) {
+		if (memcmp(c, membuf_buf(&prefix), membuf_size(&prefix)) != 0) {
 			c++;
 			continue;
 		}
@@ -451,7 +451,8 @@ int fix_dep_file(struct depfile *depfile, struct config *config)
 		ssize_t dep_size;
 
 		membuf_lower(&opts[i]);
-		membuf_replace(&opts[i], '_', '/');
+		membuf_replace(&opts[i],
+			       (membuf_byte_pair){.from = '_', .to = '/'});
 
 		if (membuf_empty(&depfile->sdkconfig_dir)) {
 			dep_size = membuf_cat(&dep_buf, &opts[i], &ext);
