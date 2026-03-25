@@ -19,8 +19,10 @@
  *     extraction from argv is needed.
  *  5. Rewrites the dependency file, replacing the single sdkconfig.h
  *     dependency with granular per-option dummy files (e.g.
- *     <sdkconfig_dir>/my/option.cdep for CONFIG_MY_OPTION), but only for
- *     those that actually exist on disk.
+ *     <sdkconfig_dir>/my/option.cdep for CONFIG_MY_OPTION). Any missing
+ *     .cdep is created as an empty stub (parent directories as needed) so
+ *     the path always exists for Ninja; kconfgen sync_deps updates
+ *     contents when values change.
  *
  * This ensures that a source file is only rebuilt when the specific
  * configuration options it references change, rather than on every
@@ -428,7 +430,8 @@ char *get_dep_fn(int argc, char *argv[])
  *  2. All original dependencies *except* sdkconfig.h.
  *  3. For each CONFIG_XYZ option found in the source, the corresponding
  *     dummy file (e.g. <sdkconfig_dir>/my/option.cdep for
- *     CONFIG_MY_OPTION), but only if that file exists on disk.
+ *     CONFIG_MY_OPTION). Missing files are created empty (parent dirs as
+ *     needed) so they can always be listed as dependencies.
  *
  * The option name is lowercased and underscores are replaced with '/'
  * to derive the file path.
@@ -494,8 +497,9 @@ int fix_dep_file(struct depfile *depfile, struct config *config)
 
 		DEFINE_MEMBUF(dep, membuf_buf(&dep_buf), dep_size);
 
-		if (access(membuf_buf(&dep), F_OK))
-			continue;
+		if (access(membuf_buf(&dep), F_OK) &&
+		    touch_file(membuf_buf(&dep)))
+			goto err;
 
 		if (membuf_fwrite(&sep, fp) == -1)
 			goto err;

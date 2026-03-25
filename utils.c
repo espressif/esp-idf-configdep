@@ -37,3 +37,36 @@ void err_msg(char *file, int line, const char *func, int add_errno,
 	else
 		_f(stderr, "\n");
 }
+
+/**
+ * @brief Create parent directories for @p path, then create an empty file.
+ *
+ * The path buffer is temporarily modified (separators replaced with NUL)
+ * during directory creation, then restored.
+ */
+int touch_file(char *path)
+{
+	FILE *fp;
+	char *s;
+
+	for (s = path; *s; s++) {
+		if (*s != '/')
+			continue;
+		if (s == path)
+			continue;
+		*s = '\0';
+		(void)mkdir(path, 0755);
+		*s = '/';
+	}
+
+	fp = fopen(path, "wb");
+	if (!fp) {
+		err_errno("cannot create '%s'", path);
+		return -1;
+	}
+	if (fclose(fp)) {
+		err_errno("cannot close '%s'", path);
+		return -1;
+	}
+	return 0;
+}
