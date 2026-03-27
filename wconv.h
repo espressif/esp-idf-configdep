@@ -13,8 +13,8 @@
  *  - allocating (grows the destination membuf when it is too small), and
  *  - noalloc   (fails immediately if the buffer is insufficient).
  */
-#ifndef _WCONV_H_
-#define _WCONV_H_
+#ifndef WCONV_H
+#define WCONV_H
 
 #include <wchar.h>
 
@@ -25,4 +25,4 @@ size_t mbs_to_wcs_noalloc(const char *mbs, struct membuf *wcs);
 size_t wcs_to_mbs(const wchar_t *wcs, struct membuf *mbs);
 size_t wcs_to_mbs_noalloc(const wchar_t *wcs, struct membuf *mbs);
 
-#endif /* _WCONV_H_ */
+#endif /* WCONV_H */

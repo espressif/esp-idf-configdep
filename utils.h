@@ -18,8 +18,8 @@
  *                                     avoids re-entrant UTF-8 conversion
  *                                     inside the conversion helpers).
  */
-#ifndef _UTILS_H_
-#define _UTILS_H_
+#ifndef UTILS_H
+#define UTILS_H
 
 #include <ctype.h>
 #include <errno.h>
@@ -77,4 +77,13 @@ void err_msg(char *file, int line, const char *func, int add_errno,
 	err_msg(__FILE__, __LINE__, __func__, 1, fprintf_raw, vfprintf_raw,    \
 		__VA_ARGS__)
 
-#endif /* _UTILS_H_ */
+/**
+ * @brief Create an empty file at @p path, creating parent directories as
+ * needed.
+ *
+ * @param path  File path to create (must be a modifiable copy).
+ * @return 0 on success, -1 on error.
+ */
+int touch_file(char *path);
+
+#endif /* UTILS_H */

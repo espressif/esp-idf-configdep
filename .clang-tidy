@@ -1,2 +1,9 @@
-FormatStyle: file
+# Used by: make clang-tidy (reads this file automatically)
+Checks: >-
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  portability-*
 WarningsAsErrors: "*"
+FormatStyle: file

@@ -15,6 +15,8 @@
  *
  * Linked with -municode so that the CRT calls wmain() instead of main().
  */
+#include <stddef.h>
+
 #include <processenv.h>
 #include <wchar.h>
 
@@ -32,7 +34,7 @@ extern int main(int argc, char **argv);
  */
 int wmain(int argc, wchar_t **wargv)
 {
-#define ARGS_BUF_SIZE (1024 * 10 * 4)
+#define ARGS_BUF_SIZE ((size_t)1024 * 10 * 4)
 #define ARGV_BUF_SIZE (1024)
 
 	static char args_buf[ARGS_BUF_SIZE];
@@ -40,7 +42,8 @@ int wmain(int argc, wchar_t **wargv)
 	char *args;
 
 	static char *argv_buf[ARGV_BUF_SIZE];
-	DEFINE_MEMBUF(argv_mb, argv_buf, ARGV_BUF_SIZE * sizeof(char *));
+	DEFINE_MEMBUF(argv_mb, (void *)argv_buf,
+		      ARGV_BUF_SIZE * sizeof(char *));
 	char **argv;
 
 	int rv = EXIT_FAILURE;
@@ -56,7 +59,7 @@ int wmain(int argc, wchar_t **wargv)
 	}
 
 	args = membuf_buf(&args_mb);
-	argv = membuf_buf(&argv_mb);
+	argv = (char **)membuf_buf(&argv_mb);
 
 	size_t remaining = membuf_size(&args_mb);
 	size_t offset = 0;

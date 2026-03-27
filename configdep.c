@@ -13,11 +13,16 @@
  *  2. Locates the dependency file produced by the compiler (-MF flag).
  *  3. Parses the dependency file; if sdkconfig.h is listed as a dependency
  *     it is removed.
- *  4. Scans the source file for CONFIG_* references.
+ *  4. Scans every prerequisite listed in the .d file (source, headers,
+ *     .inc files, etc.) for CONFIG_* references. The source file is
+ *     included because the compiler lists it in the .d file — no separate
+ *     extraction from argv is needed.
  *  5. Rewrites the dependency file, replacing the single sdkconfig.h
  *     dependency with granular per-option dummy files (e.g.
- *     my/option.cdep for CONFIG_MY_OPTION), but only for those that actually
- *     exist on disk.
+ *     <sdkconfig_dir>/my/option.cdep for CONFIG_MY_OPTION). Any missing
+ *     .cdep is created as an empty stub (parent directories as needed) so
+ *     the path always exists for Ninja; kconfgen sync_deps updates
+ *     contents when values change.
  *
  * This ensures that a source file is only rebuilt when the specific
  * configuration options it references change, rather than on every
@@ -25,6 +30,8 @@
  */
 #include "membuf.h"
 #include "utils.h"
+
+#include <ctype.h>
 
 /**
  * @brief Parsed representation of a compiler-generated dependency (.d) file.
@@ -53,10 +60,9 @@ struct depfile {
  * found by scanning the source file contents.
  */
 struct config {
-	struct membuf data; /**< Raw source file content buffer. */
+	struct membuf data; /**< File content buffer (reused across scans). */
 	struct membuf opts; /**< Array of membuf option-name entries. */
 	size_t opts_cnt;    /**< Number of unique options found. */
-	char *fn;	    /**< Source file path. */
 };
 
 /**
@@ -155,7 +161,7 @@ void put_depfile(struct depfile *depfile)
 struct depfile *get_depfile(char *fn)
 {
 #define DEPS_CNT (512)
-#define DATA_SIZE (1024 * 7)
+#define DATA_SIZE ((size_t)1024 * 7)
 
 	static struct membuf deps[DEPS_CNT];
 	static char data[DATA_SIZE];
@@ -246,20 +252,24 @@ err:
 int add_config_opt(struct config *config, char *opt, size_t opt_size)
 {
 	struct membuf *opts = membuf_buf(&config->opts);
-	struct membuf opt_mb;
+	struct membuf opt_key;
 
 	if (!opt_size)
 		return 0;
 
-	if (membuf_init(&opt_mb, opt, opt_size))
+	if (membuf_init(&opt_key, opt, opt_size))
 		return -1;
 
 	for (int i = 0; i < config->opts_cnt; i++) {
-		if (!membuf_cmp(&opts[i], &opt_mb))
+		if (!membuf_cmp(&opts[i], &opt_key))
 			return 0;
 	}
 
-	membuf_init(&opts[config->opts_cnt++], opt, opt_size);
+	if (membuf_init_alloc(&opts[config->opts_cnt], opt_size))
+		return -1;
+
+	memcpy(membuf_buf(&opts[config->opts_cnt]), opt, opt_size);
+	config->opts_cnt++;
 
 	if (config->opts_cnt * sizeof(struct membuf) <
 	    membuf_size(&config->opts))
@@ -274,90 +284,117 @@ int add_config_opt(struct config *config, char *opt, size_t opt_size)
 /** Release resources held by a parsed config. */
 void put_config(struct config *config)
 {
+	struct membuf *opts = membuf_buf(&config->opts);
+
+	for (int i = 0; i < config->opts_cnt; i++)
+		membuf_free(&opts[i]);
+	config->opts_cnt = 0;
+
 	membuf_free(&config->opts);
 	membuf_free(&config->data);
 }
 
 /**
- * @brief Scan a source file for CONFIG_* references.
+ * @brief Read one dependency file and scan it for CONFIG_* options.
  *
- * Reads the entire file, then searches for the literal string "CONFIG_"
- * followed by one or more uppercase letters, digits, or underscores.
- * Each unique option name (the part after "CONFIG_") is stored in the
- * returned config structure.
+ * Opens the file, reads it into config->data (reusing the buffer across
+ * calls to avoid repeated allocations), and extracts CONFIG_* references.
  *
- * @param fn  Path to the source file.
- * @return Pointer to a static config structure, or NULL on error.
+ * @return 0 on success (including file-not-found), -1 on real error.
  */
-struct config *get_config(char *fn)
+static int config_scan_file(struct config *config, struct membuf *dep)
 {
-#define OPTS_CNT (256)
-#define DATA_SIZE (1024 * 10 * 3)
+	if (membuf_empty(dep))
+		return 0;
 
-	static struct membuf opts[OPTS_CNT];
-	static char data[DATA_SIZE];
-	ssize_t data_size;
-	static struct config config;
-	FILE *fp = NULL;
+	/* membuf_cat builds a NUL-terminated path in config->data;
+	 * membuf_fread below overwrites it with file content after
+	 * fopen has already consumed the path string. */
+	if (membuf_cat(&config->data, dep) == -1)
+		return -1;
 
-	config.fn = fn;
-
-	if (membuf_init(&config.opts, opts, OPTS_CNT * sizeof(struct membuf)))
-		goto err;
-
-	if (membuf_init(&config.data, data, DATA_SIZE))
-		goto err;
-
-	fp = fopen(fn, "rb");
+	FILE *fp = fopen(membuf_buf(&config->data), "rb");
 	if (!fp) {
-		err_errno("cannot open '%s'", fn);
-		goto err;
+		if (errno == ENOENT)
+			return 0;
+		err_errno("cannot open '%s'",
+			  (char *)membuf_buf(&config->data));
+		return -1;
 	}
 
-	data_size = membuf_fread(&config.data, fp);
-	if (data_size == -1) {
-		err("cannot read '%s'", fn);
-		goto err;
-	}
+	ssize_t size = membuf_fread(&config->data, fp);
+	fclose(fp);
 
-	char *c = membuf_buf(&config.data);
-	char *end = c + data_size;
+	if (size == -1)
+		return -1;
+
+	char *c = membuf_buf(&config->data);
+	char *end = c + size;
 
 	DEFINE_MEMBUF_STR(prefix, "CONFIG_");
 
 	while (c < end) {
 		char *n = membuf_buf(&prefix);
-		c = memchr(c, *n, end - c);
+		c = memchr(c, *n, (size_t)(end - c));
 		if (!c)
 			break;
 
-		if (end - c < membuf_size(&prefix))
+		if ((size_t)(end - c) < membuf_size(&prefix))
 			break;
 
-		if (memcmp(c, membuf_buf(&prefix), membuf_size(&prefix))) {
+		if (memcmp(c, membuf_buf(&prefix), membuf_size(&prefix)) != 0) {
 			c++;
 			continue;
 		}
 
 		c += membuf_size(&prefix);
 		char *opt = c;
-		while (c < end && (isupper(*c) || isdigit(*c) || *c == '_'))
+		while (c < end && (isupper((unsigned char)*c) ||
+				   isdigit((unsigned char)*c) || *c == '_'))
 			c++;
 
-		if (add_config_opt(&config, opt, c - opt))
-			goto err;
+		if (add_config_opt(config, opt, (size_t)(c - opt)))
+			return -1;
 	}
 
-	fclose(fp);
+	return 0;
+}
 
-	return &config;
+/**
+ * @brief Scan all dependencies from the depfile for CONFIG_* references.
+ *
+ * Iterates every dependency path from the parsed .d file and scans each
+ * one.  The source file is included because the compiler lists it in the
+ * .d file.  config->data is reused across calls so that once a large file
+ * grows the buffer, subsequent smaller files avoid re-allocation.
+ */
+struct config *get_config(struct depfile *depfile)
+{
+#define OPTS_CNT (256)
+#define DATA_SIZE ((size_t)1024 * 10 * 3)
 
-err:
-	if (fp)
-		fclose(fp);
+	static struct membuf opts[OPTS_CNT];
+	static char data[DATA_SIZE];
+	static struct config config;
 
 	put_config(&config);
 
+	if (membuf_init(&config.opts, opts, OPTS_CNT * sizeof(struct membuf)))
+		return NULL;
+
+	if (membuf_init(&config.data, data, DATA_SIZE))
+		return NULL;
+
+	struct membuf *deps = membuf_buf(&depfile->deps);
+
+	for (size_t i = 0; i < depfile->deps_cnt; i++) {
+		if (config_scan_file(&config, &deps[i]))
+			goto err;
+	}
+
+	return &config;
+err:
+	put_config(&config);
 	return NULL;
 
 #undef OPTS_CNT
@@ -386,14 +423,6 @@ char *get_dep_fn(int argc, char *argv[])
 }
 
 /**
- * @brief Return the source file path from the compiler arguments.
- *
- * By convention the source file is the last argument in the compiler
- * command line.
- */
-char *get_src_fn(int argc, char *argv[]) { return argv[argc - 1]; }
-
-/**
  * @brief Rewrite the dependency file with granular per-option dependencies.
  *
  * Overwrites the original dependency file with:
@@ -401,7 +430,8 @@ char *get_src_fn(int argc, char *argv[]) { return argv[argc - 1]; }
  *  2. All original dependencies *except* sdkconfig.h.
  *  3. For each CONFIG_XYZ option found in the source, the corresponding
  *     dummy file (e.g. <sdkconfig_dir>/my/option.cdep for
- *     CONFIG_MY_OPTION), but only if that file exists on disk.
+ *     CONFIG_MY_OPTION). Missing files are created empty (parent dirs as
+ *     needed) so they can always be listed as dependencies.
  *
  * The option name is lowercased and underscores are replaced with '/'
  * to derive the file path.
@@ -451,7 +481,8 @@ int fix_dep_file(struct depfile *depfile, struct config *config)
 		ssize_t dep_size;
 
 		membuf_lower(&opts[i]);
-		membuf_replace(&opts[i], '_', '/');
+		membuf_replace(&opts[i],
+			       (membuf_byte_pair){.from = '_', .to = '/'});
 
 		if (membuf_empty(&depfile->sdkconfig_dir)) {
 			dep_size = membuf_cat(&dep_buf, &opts[i], &ext);
@@ -466,8 +497,9 @@ int fix_dep_file(struct depfile *depfile, struct config *config)
 
 		DEFINE_MEMBUF(dep, membuf_buf(&dep_buf), dep_size);
 
-		if (access(membuf_buf(&dep), F_OK))
-			continue;
+		if (access(membuf_buf(&dep), F_OK) &&
+		    touch_file(membuf_buf(&dep)))
+			goto err;
 
 		if (membuf_fwrite(&sep, fp) == -1)
 			goto err;
@@ -520,8 +552,6 @@ void dump_config(struct config *c)
 	char *b;
 	int s;
 
-	printf("source: %s\n", c->fn);
-
 	struct membuf *opts = membuf_buf(&c->opts);
 	for (int i = 0; i < c->opts_cnt; i++) {
 		b = membuf_buf(&opts[i]);
@@ -541,7 +571,7 @@ void dump_config(struct config *c)
  *     successfully (nothing to optimise).
  *  4. Parse the dependency file. If sdkconfig.h is not among the
  *     dependencies, exit successfully (no optimisation needed).
- *  5. Scan the source file for CONFIG_* references.
+ *  5. Scan all .d prerequisites for CONFIG_* references.
  *  6. Rewrite the dependency file with per-option granular dependencies.
  *
  * @return EXIT_SUCCESS on success, EXIT_FAILURE on any error.
@@ -593,8 +623,8 @@ int main(int argc, char **argv)
 		goto done;
 	}
 
-	/* Step 4: Scan the source file for CONFIG_* references. */
-	config = get_config(get_src_fn(argc, argv));
+	/* Step 4: Scan all deps from the .d file for CONFIG_* references. */
+	config = get_config(depfile);
 	if (!config)
 		goto done;
 

@@ -12,6 +12,8 @@
  */
 #include "membuf.h"
 
+#include <stdint.h>
+
 int membuf_init(struct membuf *mb, void *b, size_t s)
 {
 	if (s > MEMBUF_MAX_SIZE) {
@@ -120,20 +122,20 @@ void membuf_lower(struct membuf *mb)
 	char *c = membuf_buf(mb);
 
 	while (c < end) {
-		*c = tolower(*c);
+		*c = (char)tolower((unsigned char)*c);
 		c++;
 	}
 }
 
-/* Replace every occurrence of byte 'from' with byte 'to' in-place. */
-void membuf_replace(struct membuf *mb, char from, char to)
+/* Replace every occurrence of byte repl.from with repl.to in-place. */
+void membuf_replace(struct membuf *mb, membuf_byte_pair repl)
 {
 	char *end = membuf_end(mb);
 	char *c = membuf_buf(mb);
 
 	while (c < end) {
-		if (*c == from)
-			*c = to;
+		if (*c == repl.from)
+			*c = repl.to;
 		c++;
 	}
 }
@@ -157,10 +159,8 @@ ssize_t membuf_fread(struct membuf *mb, FILE *fp)
 	if (membuf_grow(mb, size))
 		return -1;
 
-	errno = 0;
-	rewind(fp);
-	if (errno) {
-		err_errno("rewind");
+	if (fseek(fp, 0, SEEK_SET)) {
+		err_errno("fseek");
 		return -1;
 	}
 
@@ -210,7 +210,7 @@ void *membuf_endswith(struct membuf *mb, char *s)
 
 	if (membuf_size(mb) < s_len)
 		return NULL;
-	if (memcmp(end - s_len, s, s_len))
+	if (memcmp(end - s_len, s, s_len) != 0)
 		return NULL;
 
 	return end - s_len;
@@ -233,12 +233,14 @@ int membuf_cmp(struct membuf *mb1, struct membuf *mb2)
 /* Concatenate src_cnt membufs into dst, NUL-terminating the result. */
 ssize_t membuf_cat_mbs(struct membuf *dst, struct membuf **src, size_t src_cnt)
 {
-
-	ssize_t size = 0;
+	size_t size = 0;
 	char *c;
 
-	for (int i = 0; i < src_cnt; i++)
+	for (int i = 0; i < src_cnt; i++) {
 		size += membuf_size(src[i]);
+		if (size > (size_t)PTRDIFF_MAX)
+			return -1;
+	}
 
 	if (membuf_grow(dst, size + 1))
 		return -1;
@@ -250,5 +252,5 @@ ssize_t membuf_cat_mbs(struct membuf *dst, struct membuf **src, size_t src_cnt)
 
 	*c = '\0';
 
-	return size;
+	return (ssize_t)size;
 }

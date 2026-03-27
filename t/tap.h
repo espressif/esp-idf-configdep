@@ -24,8 +24,8 @@
  *       return tap_result();
  *   }
  */
-#ifndef _TAP_H_
-#define _TAP_H_
+#ifndef TAP_H
+#define TAP_H
 
 #include <stdio.h>
 
@@ -54,4 +54,4 @@ static int tap_failures;
 
 #define tap_result() (printf("1..%d\n", tap_test_num), tap_failures)
 
-#endif /* _TAP_H_ */
+#endif /* TAP_H */

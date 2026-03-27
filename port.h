@@ -23,8 +23,8 @@
  *  - Defines EOL as "\n".
  *  - Includes <unistd.h> for access() / F_OK.
  */
-#ifndef _PORT_H_
-#define _PORT_H_
+#ifndef PORT_H
+#define PORT_H
 
 #ifdef _WIN32
 
@@ -35,6 +35,7 @@ int fprintf_w(FILE *, const char *, ...);
 int vfprintf_w(FILE *, const char *, va_list);
 FILE *fopen_w(const char *, const char *);
 int access_w(const char *, int);
+int mkdir_w(const char *, int);
 
 /**
  * Raw (non-overridden) fprintf and vfprintf function pointers.
@@ -54,6 +55,7 @@ extern int (*vfprintf_raw)(FILE *, const char *, va_list);
 #define access access_w
 
 #define fopen fopen_w
+#define mkdir mkdir_w
 
 /** End-of-line sequence for dependency files (CRLF on Windows). */
 #define EOL "\r\n"
@@ -63,8 +65,9 @@ extern int (*vfprintf_raw)(FILE *, const char *, va_list);
 /** End-of-line sequence for dependency files (LF on POSIX). */
 #define EOL "\n"
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 #endif // _WIN32
 
-#endif // _PORT_H_
+#endif // PORT_H
