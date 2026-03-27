@@ -1,3 +1,19 @@
+## v0.2.0 (2026-03-27)
+
+### ✨ New Features
+
+- **configdep**: create empty .cdep stubs when missing *(Jan Beran - 6712cf3)*
+- **configdep**: scan translation unit deps for CONFIG_* references *(Jan Beran - db30f6d)*
+
+### 🐛 Bug Fixes
+
+- satisfy clang-tidy bugprone checks *(Jan Beran - 7236bc4)*
+
+### 📖 Documentation
+
+- add AGENTS.md with repository overview *(Jan Beran - 094d5ba)*
+
+
 ## v0.1.4 (2026-03-05)
 
 ### 🐛 Bug Fixes
