@@ -433,13 +433,46 @@ char *get_dep_fn(int argc, char *argv[])
  *     CONFIG_MY_OPTION). Missing files are created empty (parent dirs as
  *     needed) so they can always be listed as dependencies.
  *
- * The option name is lowercased and underscores are replaced with '/'
- * to derive the file path.
+ * The option name is converted to a filesystem path by
+ * config_option_path(): lowercased, underscores become '/' separators,
+ * leading underscores and runs of underscores are handled so paths
+ * never contain empty components (valid Kconfig names are not expected
+ * to use '__').
  *
  * @param depfile  Parsed dependency file (sdkconfig.h already filtered out).
  * @param config   CONFIG_* options extracted from the source file.
  * @return 0 on success, -1 on error.
  */
+
+/**
+ * @brief Convert a CONFIG_* suffix into a .cdep-relative path in-place.
+ *
+ * Lowercases all characters, converts underscores to '/' directory
+ * separators, skips leading underscores, and collapses runs of
+ * underscores to a single '/' — all in a single pass.
+ */
+static void config_option_path(struct membuf *mb)
+{
+	char *p = membuf_buf(mb);
+	size_t n = membuf_size(mb);
+	size_t r = 0, w = 0;
+
+	while (r < n && p[r] == '_')
+		r++;
+
+	while (r < n) {
+		if (p[r] == '_') {
+			if (w > 0 && p[w - 1] != '/')
+				p[w++] = '/';
+			r++;
+		} else {
+			p[w++] = (char)tolower((unsigned char)p[r++]);
+		}
+	}
+
+	membuf_set_size(mb, w);
+}
+
 int fix_dep_file(struct depfile *depfile, struct config *config)
 {
 #define DEP_FN_SIZE (1024)
@@ -480,9 +513,10 @@ int fix_dep_file(struct depfile *depfile, struct config *config)
 	for (int i = 0; i < config->opts_cnt; i++) {
 		ssize_t dep_size;
 
-		membuf_lower(&opts[i]);
-		membuf_replace(&opts[i],
-			       (membuf_byte_pair){.from = '_', .to = '/'});
+		config_option_path(&opts[i]);
+
+		if (membuf_empty(&opts[i]))
+			continue;
 
 		if (membuf_empty(&depfile->sdkconfig_dir)) {
 			dep_size = membuf_cat(&dep_buf, &opts[i], &ext);
