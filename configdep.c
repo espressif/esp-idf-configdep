@@ -299,6 +299,9 @@ void put_config(struct config *config)
  *
  * Opens the file, reads it into config->data (reusing the buffer across
  * calls to avoid repeated allocations), and extracts CONFIG_* references.
+ * A match is ignored when the byte before @c CONFIG_ is an identifier
+ * character (@c [A-Za-z0-9_]), so tokens like @c __CONFIG_H__ or
+ * @c MYCONFIG_ENABLE are not treated as Kconfig options.
  *
  * @return 0 on success (including file-not-found), -1 on real error.
  */
@@ -328,8 +331,9 @@ static int config_scan_file(struct config *config, struct membuf *dep)
 	if (size == -1)
 		return -1;
 
-	char *c = membuf_buf(&config->data);
-	char *end = c + size;
+	char *beg = membuf_buf(&config->data);
+	char *end = beg + size;
+	char *c = beg;
 
 	DEFINE_MEMBUF_STR(prefix, "CONFIG_");
 
@@ -345,6 +349,15 @@ static int config_scan_file(struct config *config, struct membuf *dep)
 		if (memcmp(c, membuf_buf(&prefix), membuf_size(&prefix)) != 0) {
 			c++;
 			continue;
+		}
+
+		if (c > beg) {
+			unsigned char prev = (unsigned char)c[-1];
+
+			if (isalnum(prev) || prev == '_') {
+				c++;
+				continue;
+			}
 		}
 
 		c += membuf_size(&prefix);
