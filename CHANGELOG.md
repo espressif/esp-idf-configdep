@@ -1,3 +1,11 @@
+## v0.2.1 (2026-04-14)
+
+### 🐛 Bug Fixes
+
+- **configdep**: skip CONFIG_ preceded by identifier characters *(Jan Beran - a6ccb39)*
+- normalize .cdep paths for CONFIG suffixes containing __ *(Jan Beran - 3d048c2)*
+
+
 ## v0.2.0 (2026-03-27)
 
 ### ✨ New Features
