@@ -66,6 +66,10 @@ struct membuf {
 /** Return the effective byte size of @p mb (allocation flag masked out). */
 #define membuf_size(mb) ((mb)->size & ~MEMBUF_ALLOC_MASK)
 
+/** Set the effective size of @p mb, preserving the allocation flag. */
+#define membuf_set_size(mb, s)                                                 \
+	((mb)->size = ((mb)->size & MEMBUF_ALLOC_MASK) | (s))
+
 /** Return a pointer past the last byte of @p mb. */
 #define membuf_end(mb) ((void *)((char *)membuf_buf(mb) + membuf_size(mb)))
 
