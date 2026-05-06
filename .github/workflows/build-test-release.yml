@@ -121,6 +121,7 @@ jobs:
             pkg_manager: brew install
             packages: coreutils
             dist: targz-pkg
+            macos_deployment_target: "11.0"
 
           - name: macos-x86-64
             cc: clang
@@ -128,6 +129,7 @@ jobs:
             pkg_manager: brew install
             packages: coreutils
             dist: targz-pkg
+            macos_deployment_target: "10.12"
 
           - name: windows-i686
             cc: i686-w64-mingw32-gcc
@@ -151,6 +153,8 @@ jobs:
           ${{ matrix.pkg_manager }} ${{ matrix.packages }}
 
       - name: build
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_deployment_target }}
         run: |
           make CC=${{ matrix.cc }}
 
@@ -174,6 +178,8 @@ jobs:
           notarization-team-id: ${{ secrets.MACOS_CS_APPLE_TEAM_ID }}
 
       - name: ${{ matrix.runner }}
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_deployment_target }}
         run: |
           make CC=${{ matrix.cc }} ${{ matrix.dist }}
 
