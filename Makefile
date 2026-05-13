@@ -32,8 +32,7 @@ else ifneq ($(findstring aarch64,$(DUMPMACHINE)),)
 else ifneq ($(findstring arm64,$(DUMPMACHINE)),)
 	ARCH := arm64
 else ifneq ($(findstring arm,$(DUMPMACHINE)),)
-	# Check for Hard Float vs Soft Float
-	ifneq ($(findstring gnueabihf,$(DUMPMACHINE)),)
+	ifneq ($(findstring eabihf,$(DUMPMACHINE)),)
 		ARCH := armhf
 	else
 		ARCH := armel
