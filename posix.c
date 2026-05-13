@@ -10,6 +10,7 @@
  *
  * Provides exec_process() for POSIX systems using fork()/execvp()/waitpid().
  */
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
