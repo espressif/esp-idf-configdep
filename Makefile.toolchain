@@ -1,0 +1,84 @@
+# Makefile.toolchain
+#
+# Downloads prebuilt musl cross-compilation toolchains and prints an
+# `export PATH=…` line on stdout so it can be eval-ed:
+#
+#   eval "$(make -f Makefile.toolchain linux-amd64)"
+#   make CC=x86_64-linux-musl-gcc LDFLAGS_APPEND=-static targz-pkg
+#
+# Layout:
+#
+#   toolchains/<target>/     — extracted tree
+#   toolchains/<target>/.done — stamp: fetch + extract ok
+#
+# The archive is streamed from curl directly into tar, so there is
+# no on-disk tarball cache.  Run `make -f Makefile.toolchain clean`
+# to wipe everything.
+#
+# Toolchains are fetched from the musl-cc/musl.cc GitHub mirror
+# (byte-perfect mirror of musl.cc, served from GitHub's CDN).
+
+SHELL := /bin/bash
+
+.DEFAULT_GOAL := help
+
+.PHONY: help clean
+
+MUSL_CC_BASE := https://github.com/musl-cc/musl.cc/releases/download/v0.0.1
+
+help:
+	@echo 'Makefile.toolchain — fetch prebuilt musl cross-compilation toolchains'
+	@echo ''
+	@echo 'USAGE:'
+	@echo '  eval "$$(make -f Makefile.toolchain <target>)"'
+	@echo '  make CC=<triplet>-gcc LDFLAGS_APPEND=-static targz-pkg'
+	@echo ''
+	@echo 'TARGETS:'
+	@echo '  linux-amd64    CC=x86_64-linux-musl-gcc'
+	@echo '  linux-i386     CC=i686-linux-musl-gcc'
+	@echo '  linux-arm64    CC=aarch64-linux-musl-gcc'
+	@echo '  linux-armhf    CC=arm-linux-musleabihf-gcc'
+	@echo '  linux-armel    CC=arm-linux-musleabi-gcc'
+	@echo ''
+	@echo 'SPECIAL TARGETS:'
+	@echo '  all            fetch all toolchains'
+	@echo '  clean          remove all fetched toolchains'
+
+clean:
+	@rm -rf $(CURDIR)/toolchains
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+
+TOOLCHAINS_DIR := $(CURDIR)/toolchains
+
+# ---------------------------------------------------------------------------
+# Per-target URLs
+# ---------------------------------------------------------------------------
+
+linux-amd64-url := $(MUSL_CC_BASE)/x86_64-linux-musl-cross.tgz
+linux-i386-url  := $(MUSL_CC_BASE)/i686-linux-musl-cross.tgz
+linux-arm64-url := $(MUSL_CC_BASE)/aarch64-linux-musl-cross.tgz
+linux-armhf-url := $(MUSL_CC_BASE)/arm-linux-musleabihf-cross.tgz
+linux-armel-url := $(MUSL_CC_BASE)/arm-linux-musleabi-cross.tgz
+
+TOOLCHAINS := linux-amd64 linux-i386 linux-arm64 linux-armhf linux-armel
+
+.PHONY: all $(TOOLCHAINS)
+
+all: $(TOOLCHAINS)
+
+$(TOOLCHAINS_DIR):
+	@mkdir -p $@
+
+$(TOOLCHAINS): %: $(TOOLCHAINS_DIR)/%/.done
+	@echo "export PATH=\"$(TOOLCHAINS_DIR)/$*/bin:\$$PATH\""
+
+$(TOOLCHAINS_DIR)/%/.done: Makefile.toolchain | $(TOOLCHAINS_DIR)
+	@echo "Fetching $($*-url)..." >&2
+	@rm -rf "$(TOOLCHAINS_DIR)/$*"
+	@mkdir -p "$(TOOLCHAINS_DIR)/$*"
+	@set -o pipefail; \
+	  curl -fsSL "$($*-url)" | tar -xzf - -C "$(TOOLCHAINS_DIR)/$*" --strip-components=1
+	@touch $@

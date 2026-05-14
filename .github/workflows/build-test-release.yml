@@ -80,41 +80,40 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: linux-i686
-            cc: i686-linux-gnu-gcc
+          # Linux — statically linked with musl via prebuilt musl.cc
+          # toolchains.  Produces fully static binaries that run on any
+          # Linux kernel regardless of the host libc.
+          - name: linux-x86-64
             runner: ubuntu-latest
-            pkg_manager: sudo apt-get update && sudo apt-get install -y
-            packages: gcc-i686-linux-gnu
+            musl_target: linux-amd64
+            cc: x86_64-linux-musl-gcc
             dist: targz-pkg
 
-          - name: linux-x86-64
-            cc: x86_64-linux-gnu-gcc
+          - name: linux-i686
             runner: ubuntu-latest
-            pkg_manager: sudo apt-get update && sudo apt-get install -y
-            packages: gcc-x86-64-linux-gnu
+            musl_target: linux-i386
+            cc: i686-linux-musl-gcc
             dist: targz-pkg
 
           - name: linux-aarch64
-            cc: aarch64-linux-gnu-gcc
             runner: ubuntu-latest
-            pkg_manager: sudo apt-get update && sudo apt-get install -y
-            packages: gcc-aarch64-linux-gnu
+            musl_target: linux-arm64
+            cc: aarch64-linux-musl-gcc
             dist: targz-pkg
 
           - name: linux-arm-gnueabihf
-            cc: arm-linux-gnueabihf-gcc
             runner: ubuntu-latest
-            pkg_manager: sudo apt-get update && sudo apt-get install -y
-            packages: gcc-arm-linux-gnueabihf
+            musl_target: linux-armhf
+            cc: arm-linux-musleabihf-gcc
             dist: targz-pkg
 
           - name: linux-arm-gnueabi
-            cc: arm-linux-gnueabi-gcc
             runner: ubuntu-latest
-            pkg_manager: sudo apt-get update && sudo apt-get install -y
-            packages: gcc-arm-linux-gnueabi
+            musl_target: linux-armel
+            cc: arm-linux-musleabi-gcc
             dist: targz-pkg
 
+          # macOS
           - name: macos-arm64
             cc: clang
             runner: macos-latest
@@ -131,6 +130,7 @@ jobs:
             dist: targz-pkg
             macos_deployment_target: "10.12"
 
+          # Windows (cross-compiled from Linux)
           - name: windows-i686
             cc: i686-w64-mingw32-gcc
             runner: ubuntu-latest
@@ -148,15 +148,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: install
+      - name: fetch musl toolchain
+        if: ${{ matrix.musl_target }}
         run: |
-          ${{ matrix.pkg_manager }} ${{ matrix.packages }}
+          make -f Makefile.toolchain ${{ matrix.musl_target }} >/dev/null
+          echo "$PWD/toolchains/${{ matrix.musl_target }}/bin" >> "$GITHUB_PATH"
+
+      - name: install
+        if: ${{ matrix.pkg_manager }}
+        run: ${{ matrix.pkg_manager }} ${{ matrix.packages }}
 
       - name: build
         env:
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_deployment_target }}
-        run: |
-          make CC=${{ matrix.cc }}
+        run: make CC=${{ matrix.cc }} ${{ matrix.musl_target && 'LDFLAGS_APPEND=-static' || '' }}
 
       - name: sign binaries
         if: |
@@ -177,11 +182,10 @@ jobs:
           notarization-password: ${{ secrets.MACOS_CS_APP_SPECIFIC_PASSWORD }}
           notarization-team-id: ${{ secrets.MACOS_CS_APPLE_TEAM_ID }}
 
-      - name: ${{ matrix.runner }}
+      - name: package
         env:
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_deployment_target }}
-        run: |
-          make CC=${{ matrix.cc }} ${{ matrix.dist }}
+        run: make CC=${{ matrix.cc }} ${{ matrix.musl_target && 'LDFLAGS_APPEND=-static' || '' }} ${{ matrix.dist }}
 
       - name: upload
         uses: actions/upload-artifact@v4
