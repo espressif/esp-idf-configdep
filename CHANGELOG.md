@@ -1,3 +1,10 @@
+## v0.2.2 (2026-05-14)
+
+### 🐛 Bug Fixes
+
+- include sys/types.h for pid_t in posix.c *(Jan Beran - 9302d21)*
+
+
 ## v0.2.1 (2026-04-14)
 
 ### 🐛 Bug Fixes
