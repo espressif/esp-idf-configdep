@@ -86,4 +86,46 @@ void err_msg(char *file, int line, const char *func, int add_errno,
  */
 int touch_file(char *path);
 
+/**
+ * @brief Whole-second file timestamps (access and modification time).
+ *
+ * Wide enough to hold both a POSIX @c time_t and the 64-bit Windows
+ * @c __time64_t without truncation.
+ */
+struct file_times {
+	long long atime; /**< Access time, seconds since the epoch. */
+	long long mtime; /**< Modification time, seconds since the epoch. */
+};
+
+/**
+ * @brief Read the access and modification times of @p path into @p ft.
+ *
+ * A missing @p path reports @c ENOENT via errno without logging, since callers
+ * may treat its absence as a non-fatal, best-effort condition; other errors
+ * are logged.
+ *
+ * @param path  File to read the timestamps of.
+ * @param ft    Out: timestamps of @p path on success.
+ * @return 0 on success, -1 on error.
+ */
+int get_file_times(const char *path, struct file_times *ft);
+
+/**
+ * @brief Apply the access and modification times in @p ft to @p path.
+ *
+ * Used to backdate a freshly created .cdep stub to auto.conf's mtime so the
+ * stub is never newer than the object files compiled in the same build,
+ * avoiding a one-shot spurious rebuild on the next ninja run. Whole-second
+ * precision is sufficient: auto.conf is written before any compilation, so
+ * its (floored) mtime is always <= every object mtime.
+ *
+ * auto.conf's timestamps are read once (get_file_times) and applied to every
+ * stub created in a build, so it is stat'd a single time per invocation.
+ *
+ * @param path  File whose timestamps are to be set.
+ * @param ft    Timestamps to apply.
+ * @return 0 on success, -1 on error.
+ */
+int set_file_times(const char *path, const struct file_times *ft);
+
 #endif /* UTILS_H */

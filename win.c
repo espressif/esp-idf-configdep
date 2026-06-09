@@ -25,6 +25,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stringapiset.h>
+#include <sys/stat.h>
+#include <sys/utime.h>
 #include <wchar.h>
 #include <windows.h>
 #include <winerror.h>
@@ -270,6 +272,80 @@ int mkdir_w(const char *path, int mode)
 	rv = _wmkdir(membuf_buf(&wfn));
 err:
 	membuf_free(&wfn);
+
+	return rv;
+
+#undef FN_WC_CNT
+}
+
+/**
+ * @brief Read @p path's timestamps (Windows). See get_file_times() in utils.h.
+ *
+ * Converts the UTF-8 path to wide-char and uses _wstat64.
+ */
+int get_file_times(const char *path, struct file_times *ft)
+{
+#define FN_WC_CNT ((size_t)1024 * 10)
+
+	static wchar_t wpath_buf[FN_WC_CNT];
+	DEFINE_MEMBUF(wpath, wpath_buf, FN_WC_CNT * sizeof(wchar_t));
+
+	struct _stat64 st;
+	int rv = -1;
+
+	if (!mbs_to_wcs(path, &wpath)) {
+		errno = ENOMEM;
+		goto err;
+	}
+
+	if (_wstat64(membuf_buf(&wpath), &st)) {
+		if (errno != ENOENT)
+			err_errno("stat '%s'", path);
+		goto err;
+	}
+
+	ft->atime = st.st_atime;
+	ft->mtime = st.st_mtime;
+
+	rv = 0;
+err:
+	membuf_free(&wpath);
+
+	return rv;
+
+#undef FN_WC_CNT
+}
+
+/**
+ * @brief Apply @p ft's timestamps to @p path (Windows). See set_file_times()
+ * in utils.h. Converts the UTF-8 path to wide-char and uses _wutime64.
+ */
+int set_file_times(const char *path, const struct file_times *ft)
+{
+#define FN_WC_CNT ((size_t)1024 * 10)
+
+	static wchar_t wpath_buf[FN_WC_CNT];
+	DEFINE_MEMBUF(wpath, wpath_buf, FN_WC_CNT * sizeof(wchar_t));
+
+	struct __utimbuf64 ut;
+	int rv = -1;
+
+	if (!mbs_to_wcs(path, &wpath)) {
+		errno = ENOMEM;
+		goto err;
+	}
+
+	ut.actime = (__time64_t)ft->atime;
+	ut.modtime = (__time64_t)ft->mtime;
+
+	if (_wutime64(membuf_buf(&wpath), &ut)) {
+		err_errno("utime '%s'", path);
+		goto err;
+	}
+
+	rv = 0;
+err:
+	membuf_free(&wpath);
 
 	return rv;
 

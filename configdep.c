@@ -22,7 +22,11 @@
  *     <sdkconfig_dir>/my/option.cdep for CONFIG_MY_OPTION). Any missing
  *     .cdep is created as an empty stub (parent directories as needed) so
  *     the path always exists for Ninja; kconfgen sync_deps updates
- *     contents when values change.
+ *     contents when values change. A freshly created stub is backdated to
+ *     auto.conf's mtime (it lives next to sdkconfig.h) so it is never newer
+ *     than the object files of the current build — otherwise it would force
+ *     one unnecessary rebuild on the next ninja run. kconfgen sync_deps
+ *     still touches the stub whenever the option's value actually changes.
  *
  * This ensures that a source file is only rebuilt when the specific
  * configuration options it references change, rather than on every
@@ -504,6 +508,31 @@ int fix_dep_file(struct depfile *depfile, struct config *config)
 	DEFINE_MEMBUF_STR(slash, "/");
 	DEFINE_MEMBUF_STR(eol, EOL);
 
+	/* Path to auto.conf (sibling of sdkconfig.h). Newly created .cdep stubs
+	 * are backdated to its mtime so they are never newer than this build's
+	 * object files, which would otherwise force a one-shot rebuild on the
+	 * next ninja run. auto.conf does not change while we run, so its
+	 * timestamps are read once here and reused for every stub created
+	 * below. Best-effort: if auto.conf is absent the stub keeps its
+	 * creation time (previous behaviour). */
+	static char autoconf_fn[DEP_FN_SIZE];
+	DEFINE_MEMBUF(autoconf_buf, autoconf_fn, DEP_FN_SIZE);
+	DEFINE_MEMBUF_STR(autoconf_name, "auto.conf");
+	struct file_times autoconf_times;
+	ssize_t autoconf_size;
+	int backdate;
+
+	if (membuf_empty(&depfile->sdkconfig_dir))
+		autoconf_size = membuf_cat(&autoconf_buf, &autoconf_name);
+	else
+		autoconf_size =
+		    membuf_cat(&autoconf_buf, &depfile->sdkconfig_dir, &slash,
+			       &autoconf_name);
+
+	backdate =
+	    autoconf_size >= 0 &&
+	    get_file_times(membuf_buf(&autoconf_buf), &autoconf_times) == 0;
+
 	FILE *fp = fopen(depfile->fn, "wb");
 	if (!fp) {
 		err_errno("open '%s'", depfile->fn);
@@ -544,9 +573,15 @@ int fix_dep_file(struct depfile *depfile, struct config *config)
 
 		DEFINE_MEMBUF(dep, membuf_buf(&dep_buf), dep_size);
 
-		if (access(membuf_buf(&dep), F_OK) &&
-		    touch_file(membuf_buf(&dep)))
-			goto err;
+		if (access(membuf_buf(&dep), F_OK)) {
+			/* Stub does not exist yet: create it, then backdate it
+			 * to auto.conf's timestamps (read once above). */
+			if (touch_file(membuf_buf(&dep)))
+				goto err;
+			if (backdate)
+				(void)set_file_times(membuf_buf(&dep),
+						     &autoconf_times);
+		}
 
 		if (membuf_fwrite(&sep, fp) == -1)
 			goto err;
@@ -561,6 +596,7 @@ int fix_dep_file(struct depfile *depfile, struct config *config)
 	rv = 0;
 err:
 	membuf_free(&dep_buf);
+	membuf_free(&autoconf_buf);
 	if (fp)
 		fclose(fp);
 	return rv;
