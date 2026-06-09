@@ -1,3 +1,10 @@
+## v0.2.3 (2026-06-09)
+
+### 🐛 Bug Fixes
+
+- set mtime of newly created .cdep files to mtime of auto.conf *(Jan Beran - 47d93f9)*
+
+
 ## v0.2.2 (2026-05-14)
 
 ### 🐛 Bug Fixes
