@@ -35,7 +35,7 @@ repos:
         args: ['--config', 'check_copyright_config.yaml']
 
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v22.1.2
+    rev: v22.1.5
     hooks:
       - id: clang-format
         types_or: [c, c++]
