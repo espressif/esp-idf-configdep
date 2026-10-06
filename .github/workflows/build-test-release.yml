@@ -44,6 +44,7 @@ jobs:
             mingw-w64-clang-x86_64-clang
             make
             diffutils
+            perl
 
       - name: lint
         shell: msys2 {0}
