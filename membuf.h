@@ -46,7 +46,7 @@ struct membuf {
 
 /** Static initializer for a membuf backed by existing storage @p b of @p s
  * bytes. */
-#define INIT_MEMBUF(b, s) {.buf = (b), .size = (s) & ~MEMBUF_ALLOC_MASK}
+#define INIT_MEMBUF(b, s) {.buf = (b), .size = (size_t)(s) & ~MEMBUF_ALLOC_MASK}
 
 /** Define and initialize a membuf variable backed by buffer @p b of @p s bytes.
  */
